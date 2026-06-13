@@ -87,10 +87,17 @@ Source files are prepared in `docs/` — copy and implement, don't write from sc
 - Load testing
 - Security audit
 
+## Localization
+
+The bot is built **i18n-first** (6 launch languages: en, ru, uk, es, de, fr).
+GitHub docs are maintained in English + Russian. See [`docs/I18N.md`](./I18N.md).
+
 ## Non-Negotiables (all phases)
 
 - No cyclic dependencies (contracts → core → database → bot → worker → dashboard)
 - Business logic only in `core` package
+- No user-facing strings hardcoded in services — i18n-first (services return codes/data)
 - All DTOs validated with zod before Phase 2
 - 80%+ test coverage for any new code
 - Conventional commits
+- GitHub docs maintained in English + Russian
