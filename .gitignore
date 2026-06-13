@@ -1,10 +1,34 @@
+# Dependencies
 node_modules
+
+# Secrets / env
 .env
 .env.*
 !.env.example
+
+# Build output
 .next
 dist
+out
 coverage
 .turbo
 *.tsbuildinfo
+
+# Prisma generated client (regenerated via `prisma generate`)
+# (kept out of git; CI runs generate)
+
+# Tooling runtime (machine-specific Claude/ruflo workspace)
+.claude-flow/
+.claude/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+
+# Archive checkpoints
 archives/checkpoints/*.zip
+
+# Stale nested duplicate (pending removal) — never stage its embedded git repo
+/SailorClawBot/

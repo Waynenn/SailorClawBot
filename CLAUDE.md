@@ -1,60 +1,96 @@
 # SailorClawBot
 
-all in one Discord bot для массового использования на разных серверах
+All-in-one Discord bot для массового использования на разных серверах.
 
-## Project Structure
+## Структура монорепо
 
-This is a Web Application built with Next.js TypeScript.
+Рабочий корень: `D:\Code\SailorClawBot\` (Turbo monorepo с pnpm workspaces)
 
-## Key Files & Directories
+```
+D:\Code\SailorClawBot\
+├── packages/
+│   ├── contracts/    (@sailorclawbot/contracts) — DTOs, интерфейсы, события, типы
+│   ├── core/         (@sailorclawbot/core)      — бизнес-логика, сервисы, EventBus
+│   └── database/     (@sailorclawbot/database)   — Prisma + репозитории
+├── apps/
+│   ├── bot/          — Discord.js интеграция (placeholder: console.log only)
+│   ├── worker/       — очереди, задачи, DLQ (placeholder)
+│   └── dashboard/    — UI администратора (placeholder)
+├── docs/             — архитектурная документация
+├── infrastructure/   — docker-compose, deploy-конфиги
+└── scripts/          — run-prisma.mjs и др.
+```
 
-Please add information about important files and directories.
+**Зависимость пакетов (строгий порядок):**
+```
+contracts → core → database → bot → worker → dashboard
+```
+Нарушать порядок и создавать циклы — запрещено.
 
-## Development Guidelines
+## Ключевые файлы
 
-### Coding Style
+| Путь | Назначение |
+|------|-----------|
+| `packages/contracts/src/repositories/` | Интерфейсы репозиториев (Guild, Profile, Wallet, Transaction, Family, Ticket) |
+| `packages/contracts/src/types/index.ts` | Общие типы (SnowflakeId, ProfileDto и др.) |
+| `packages/contracts/src/events/EventNames.ts` | Enum событий |
+| `packages/core/src/services/ProfileService.ts` | Единственный реализованный сервис |
+| `packages/database/prisma/schema.prisma` | Prisma-схема (Guild, GuildMember, Profile, Wallet, Transaction, Family, Ticket) |
+| `packages/database/src/client.ts` | Prisma-клиент singleton |
+| `docs/PHASE_1_IMPLEMENTATION_GUIDE.md` | Детальный план Phase 1 (что делать, в каком порядке) |
+| `docs/MASTER_AUDIT_REPORT.md` | Аудит проекта (статусы, риски, что нужно сделать) |
+| `docs/TIER1_TECHNICAL_STRATEGY.md` | Архитектурная стратегия для 100K серверов |
+| `docs/00-contracts-types-extended.ts` | Расширенные DTOs готовые к копированию в `packages/contracts/src/types/extended.ts` |
+| `docs/01-contracts-repositories-extended.ts` | 13 интерфейсов репозиториев готовых к добавлению в contracts |
+| `docs/03-WarningRepositoryImpl.ts` | Эталонная реализация репозитория (паттерн для Phase 1) |
+| `docs/04-ModerationService.ts` | Эталонная реализация сервиса (паттерн для Phase 1) |
 
-- Follow typescript best practices
-- Write clear, self-documenting code
-- Use meaningful variable and function names
-- Keep functions small and focused
+## Текущий статус (2026-06-13)
 
-### Testing Approach
+- **Phase 0** ✅ Complete — монорепо, Prisma, Docker, docs
+- **Phase 1** 🔄 Ready to start — расширение contracts + репозитории + сервисы + тесты
+- **Тесты** ❌ Нет ни одного
+- **apps/bot, worker, dashboard** ❌ Только placeholder
 
-- Write tests before implementation (TDD)
-- Aim for high test coverage
-- Test edge cases and error conditions
+## БД-модели (Prisma / PostgreSQL)
 
-## Files to Avoid
+- **Guild** — Discord-сервер
+- **GuildMember** — участник сервера (PK: guildId + userId)
+- **Profile** — профиль участника на сервере (unique: guildId + userId)
+- **Wallet** — кошелёк (BigInt balance), связан с транзакциями
+- **Transaction** — транзакция кошелька
+- **Family** — клан/семья на сервере (unique: guildId + name)
+- **Ticket** — тикет поддержки (enum status: open/closed)
 
-.env
+## Архитектурные паттерны
 
-## Special Instructions
+- Repository pattern через интерфейсы в `contracts`
+- Доменные сервисы в `core` работают только через интерфейсы, без Prisma напрямую
+- EventBus для событий между сервисами
+- SnowflakeId = `string` (Discord IDs)
 
-No special instructions.
+## Команды
 
-## Working with Claude Code
+```bash
+# Из SailorClawBot/ (turbo)
+pnpm build        # собрать все пакеты
+pnpm dev          # запустить в dev-режиме
+pnpm lint         # biome lint
 
-### Preferred Workflow
+# Prisma
+cd packages/database
+pnpm prisma migrate dev
+pnpm prisma generate
+```
 
-1. **Explore**: First understand the codebase
-2. **Plan**: Discuss the approach before coding
-3. **Code**: Implement with tests
-4. **Commit**: Use conventional commits
+## Переменные окружения
 
-### Git Workflow
+- `.env` — не трогать, не коммитить
+- `DATABASE_URL` — PostgreSQL connection string
 
-- Use Claude for 90% of git operations
-- Create descriptive commit messages
-- Branch naming: feature/*, bugfix/*, docs/*
+## Стиль кода
 
-### Communication Style
-
-- Ask clarifying questions before implementing
-- Explain technical decisions
-- Suggest improvements when relevant
-- Point out potential issues proactively
-
----
-
-*Generated with Claude Code Learning Hub - [https://your-site.com/tools/claude-md-generator](https://your-site.com/tools/claude-md-generator)*
+- TypeScript strict mode
+- Biome для lint/format (не ESLint/Prettier)
+- Conventional commits: `feat:`, `fix:`, `chore:`, `docs:`
+- Именование файлов: PascalCase для классов/интерфейсов, camelCase для утилит

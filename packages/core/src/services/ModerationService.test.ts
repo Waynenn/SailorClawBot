@@ -1,0 +1,233 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import type {
+  WarningRepository,
+  MuteRepository,
+  BanRepository,
+  CaseRepository,
+  PermissionRepository,
+  WarningDto,
+  MuteDto,
+  BanDto,
+  CaseDto,
+  PermissionOverrideDto,
+} from '@sailorclawbot/contracts';
+import { ModerationService } from './ModerationService.js';
+import type { EventBus, DomainEvent } from '../common/events/EventBus.js';
+import type { Logger } from '../common/logging/Logger.js';
+import { ValidationError } from '../common/errors/ValidationError.js';
+import { PermissionDeniedError } from '../common/errors/PermissionDeniedError.js';
+import { ConflictError } from '../common/errors/ConflictError.js';
+
+interface HarnessOptions {
+  warningCount?: number;
+  existingMute?: MuteDto | null;
+  existingBan?: BanDto | null;
+  permission?: PermissionOverrideDto | null;
+}
+
+function createHarness(opts: HarnessOptions = {}) {
+  const events: DomainEvent[] = [];
+  let caseSeq = 0;
+  const warningCreates: WarningDto[] = [];
+  const muteCreates: MuteDto[] = [];
+  const banCreates: BanDto[] = [];
+  const caseCreates: CaseDto[] = [];
+
+  const warnings: WarningRepository = {
+    findById: async () => null,
+    findByGuildAndUser: async () => [],
+    count: async () => opts.warningCount ?? 0,
+    create: async (input) => {
+      const dto: WarningDto = { id: `warn_${warningCreates.length + 1}`, createdAt: new Date(), ...input };
+      warningCreates.push(dto);
+      return dto;
+    },
+  };
+
+  const mutes: MuteRepository = {
+    findById: async () => null,
+    findByGuildAndUser: async () => opts.existingMute ?? null,
+    findActive: async () => [],
+    create: async (input) => {
+      const dto: MuteDto = { id: `mute_${muteCreates.length + 1}`, createdAt: new Date(), ...input };
+      muteCreates.push(dto);
+      return dto;
+    },
+    deactivate: async (id) => ({
+      id,
+      guildId: 'g',
+      userId: 'u',
+      moderatorId: 'm',
+      caseNumber: 1,
+      duration: 1,
+      expiresAt: new Date(),
+      isActive: false,
+      createdAt: new Date(),
+    }),
+    delete: async () => {},
+  };
+
+  const bans: BanRepository = {
+    findById: async () => null,
+    findByGuildAndUser: async () => opts.existingBan ?? null,
+    findActive: async () => [],
+    create: async (input) => {
+      const dto: BanDto = { id: `ban_${banCreates.length + 1}`, createdAt: new Date(), ...input };
+      banCreates.push(dto);
+      return dto;
+    },
+    deactivate: async (id) => ({
+      id,
+      guildId: 'g',
+      userId: 'u',
+      reason: 'x',
+      moderatorId: 'm',
+      caseNumber: 1,
+      isActive: false,
+      createdAt: new Date(),
+    }),
+    delete: async () => {},
+  };
+
+  const cases: CaseRepository = {
+    findById: async () => null,
+    findByGuildAndNumber: async () => null,
+    listByGuild: async () => [],
+    listByUser: async () => [],
+    getNextCaseNumber: async () => ++caseSeq,
+    create: async (input) => {
+      const dto: CaseDto = {
+        id: `case_${caseCreates.length + 1}`,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...input,
+      };
+      caseCreates.push(dto);
+      return dto;
+    },
+    update: async () => {
+      throw new Error('update not used in these tests');
+    },
+    delete: async () => {},
+  };
+
+  const permissions: PermissionRepository = {
+    findByGuildUserPermission: async () => opts.permission ?? null,
+    findByGuildUser: async () => [],
+    create: async () => {
+      throw new Error('create not used in these tests');
+    },
+    update: async () => {
+      throw new Error('update not used in these tests');
+    },
+    delete: async () => {},
+    deleteByGuildAndUser: async () => 0,
+  };
+
+  const eventBus: EventBus = {
+    publish: async (event) => {
+      events.push(event);
+    },
+  };
+
+  const logger: Logger = { info: () => {}, warn: () => {}, error: () => {} };
+
+  const service = new ModerationService(
+    warnings,
+    mutes,
+    bans,
+    cases,
+    permissions,
+    eventBus,
+    logger
+  );
+
+  return { service, events, warningCreates, muteCreates, banCreates, caseCreates };
+}
+
+const allowOverride: PermissionOverrideDto = {
+  id: 'p1',
+  guildId: 'g1',
+  userId: 'mod1',
+  permission: 'can_moderate',
+  allowed: true,
+};
+
+test('warnUser creates a warning, a case, and emits moderation.warned', async () => {
+  const h = createHarness();
+  const warning = await h.service.warnUser('g1', 'u1', 'spam', 'mod1');
+
+  assert.equal(warning.guildId, 'g1');
+  assert.equal(warning.caseNumber, 1);
+  assert.equal(h.warningCreates.length, 1);
+  assert.equal(h.caseCreates.length, 1);
+  assert.equal(h.caseCreates[0]?.type, 'warning');
+  assert.ok(h.events.some((e) => e.name === 'moderation.warned'));
+});
+
+test('warnUser rejects an empty reason', async () => {
+  const h = createHarness();
+  await assert.rejects(() => h.service.warnUser('g1', 'u1', '   ', 'mod1'), ValidationError);
+});
+
+test('warnUser rejects warning yourself', async () => {
+  const h = createHarness();
+  await assert.rejects(() => h.service.warnUser('g1', 'mod1', 'reason', 'mod1'), ValidationError);
+});
+
+test('warnUser denies a non-moderator (override allowed=false)', async () => {
+  const h = createHarness({
+    permission: { ...allowOverride, allowed: false },
+  });
+  await assert.rejects(
+    () => h.service.warnUser('g1', 'u1', 'spam', 'mod1'),
+    PermissionDeniedError
+  );
+});
+
+test('warnUser auto-mutes after reaching the warning threshold', async () => {
+  const h = createHarness({ warningCount: 3 });
+  await h.service.warnUser('g1', 'u1', 'spam', 'mod1');
+
+  assert.equal(h.muteCreates.length, 1);
+  const warned = h.events.find((e) => e.name === 'moderation.warned');
+  assert.ok(warned);
+  assert.equal((warned.payload as { autoMuted: boolean }).autoMuted, true);
+  assert.ok(h.events.some((e) => e.name === 'moderation.muted'));
+});
+
+test('muteUser rejects a user who is already actively muted', async () => {
+  const activeMute: MuteDto = {
+    id: 'm1',
+    guildId: 'g1',
+    userId: 'u1',
+    moderatorId: 'mod1',
+    caseNumber: 1,
+    duration: 60,
+    expiresAt: new Date(Date.now() + 3_600_000),
+    isActive: true,
+    createdAt: new Date(),
+  };
+  const h = createHarness({ existingMute: activeMute });
+  await assert.rejects(() => h.service.muteUser('g1', 'u1', 60, 'mod1'), ConflictError);
+});
+
+test('muteUser rejects a non-positive duration', async () => {
+  const h = createHarness();
+  await assert.rejects(() => h.service.muteUser('g1', 'u1', 0, 'mod1'), ValidationError);
+});
+
+test('banUser bans and emits moderation.banned', async () => {
+  const h = createHarness();
+  const ban = await h.service.banUser('g1', 'u1', 'raiding', 'mod1');
+
+  assert.equal(ban.isActive, true);
+  assert.equal(h.banCreates.length, 1);
+  assert.ok(h.events.some((e) => e.name === 'moderation.banned'));
+});
+
+test('unmuteUser throws when the user is not muted', async () => {
+  const h = createHarness({ existingMute: null });
+  await assert.rejects(() => h.service.unmuteUser('g1', 'u1', 'mod1'), ConflictError);
+});

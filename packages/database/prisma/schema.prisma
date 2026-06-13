@@ -8,15 +8,21 @@ datasource db {
 }
 
 model Guild {
-  id        String        @id
-  name      String
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  members   GuildMember[]
-  profiles  Profile[]
-  wallets   Wallet[]
-  families  Family[]
-  tickets   Ticket[]
+  id                  String               @id
+  name                String
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  members             GuildMember[]
+  profiles            Profile[]
+  wallets             Wallet[]
+  families            Family[]
+  tickets             Ticket[]
+  warnings            Warning[]
+  mutes               Mute[]
+  bans                Ban[]
+  cases               Case[]
+  permissionOverrides PermissionOverride[]
+  caseCounter         GuildCaseCounter?
 }
 
 model GuildMember {
@@ -88,4 +94,106 @@ model Ticket {
 enum TicketStatus {
   open
   closed
+}
+
+// ============================================================================
+// MODERATION
+// ============================================================================
+
+enum ModerationType {
+  warning
+  mute
+  ban
+  kick
+}
+
+model Warning {
+  id          String   @id @default(cuid())
+  guildId     String
+  userId      String
+  reason      String
+  moderatorId String
+  caseNumber  Int
+  createdAt   DateTime @default(now())
+  guild       Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, caseNumber])
+  @@index([guildId, userId])
+}
+
+model Mute {
+  id          String   @id @default(cuid())
+  guildId     String
+  userId      String
+  reason      String?
+  moderatorId String
+  caseNumber  Int
+  duration    Int // minutes
+  expiresAt   DateTime
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  guild       Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, caseNumber])
+  @@index([guildId, userId])
+  @@index([guildId, isActive])
+  @@index([expiresAt])
+}
+
+model Ban {
+  id          String    @id @default(cuid())
+  guildId     String
+  userId      String
+  reason      String
+  moderatorId String
+  caseNumber  Int
+  expiresAt   DateTime? // null = permanent
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  guild       Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, caseNumber])
+  @@index([guildId, userId])
+  @@index([guildId, isActive])
+}
+
+model Case {
+  id           String         @id @default(cuid())
+  guildId      String
+  caseNumber   Int
+  type         ModerationType
+  userId       String
+  moderatorId  String
+  action       String // reference to Warning/Mute/Ban id
+  reason       String?
+  metadata     Json?
+  isAppealed   Boolean        @default(false)
+  appealReason String?
+  resolvedAt   DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  guild        Guild          @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, caseNumber])
+  @@index([guildId, userId])
+}
+
+model PermissionOverride {
+  id         String  @id @default(cuid())
+  guildId    String
+  userId     String
+  permission String
+  allowed    Boolean
+  guild      Guild   @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId, permission])
+  @@index([guildId, userId])
+}
+
+// Per-guild atomic counter for sequential, human-readable case numbers.
+// Incremented via upsert+increment to stay race-safe under concurrent moderation.
+model GuildCaseCounter {
+  guildId    String @id
+  lastNumber Int    @default(0)
+  guild      Guild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
 }

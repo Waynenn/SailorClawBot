@@ -2,61 +2,95 @@
 
 ## Phase 0: Foundation
 
-Status: complete after validation.
+**Status: ✅ COMPLETE** (validated 2026-06-13)
 
-- Reconstruct monorepo root files.
-- Add architecture documentation.
-- Add package boundaries for contracts, core, database, bot, worker, and dashboard.
-- Add Prisma foundation.
-- Add Docker/Postgres foundation.
-- Validate install, build, Prisma schema, and Prisma client generation.
+- ✅ Reconstruct monorepo root files (pnpm workspaces, Turbo, tsconfig.base.json, biome.json)
+- ✅ Add architecture documentation
+- ✅ Add package boundaries for contracts, core, database, bot, worker, dashboard
+- ✅ Add Prisma foundation (schema with Guild, Profile, Wallet, Transaction, Family, Ticket)
+- ✅ Add Docker/Postgres foundation
+- ✅ Validate: pnpm install, pnpm build, prisma validate, prisma generate
 
-## Phase 1: Contracts
+## Phase 1: Contracts + Core + Repositories
 
-Status: next.
+**Status: 🔄 READY TO START** (target: 2026-06-27)
 
-- Expand DTOs for approved MVP domains.
-- Add event contracts.
-- Finalize repository interfaces.
-- Add contract tests.
+Source files are prepared in `docs/` — copy and implement, don't write from scratch.
 
-## Phase 2: Core
+- [ ] Expand DTOs (`docs/00-contracts-types-extended.ts` → `packages/contracts/src/types/extended.ts`)
+- [ ] Add extended repository interfaces (`docs/01-contracts-repositories-extended.ts`)
+- [ ] Replace EventNames with full catalog (`docs/02-events-eventnames.ts`)
+- [ ] Expand Prisma schema (add Moderation, Economy, Logging, Config models)
+- [ ] Create initial migration (`pnpm prisma migrate dev --name initial_schema`)
+- [ ] Implement 11 repositories (pattern: `docs/03-WarningRepositoryImpl.ts`)
+- [ ] Implement 6 core services (pattern: `docs/04-ModerationService.ts`)
+- [ ] Setup Jest + write tests (80%+ coverage target)
+- [ ] Setup domain error hierarchy
 
-Status: pending.
+## Phase 2: Bot Integration
 
-- Implement application services.
-- Add domain errors.
-- Add event bus abstractions.
-- Add unit tests.
+**Status: ⏳ PENDING**
 
-## Phase 3: Database
+- Add Discord.js v14
+- Wire slash commands to core services
+- No business logic in bot layer
+- Add error handling middleware
 
-Status: pending.
+## Phase 3: Worker
 
-- Add migrations.
-- Implement Prisma repositories.
-- Add seed scripts.
-- Add integration tests.
+**Status: ⏳ PENDING**
 
-## Phase 4: Bot
+- Add Bull/BullMQ queue infrastructure
+- Add jobs, retry policies, DLQ
+- Add Redis
 
-Status: pending.
+## Phase 4: Performance
 
-- Add Discord.js integration.
-- Wire commands to core services.
-- Keep business logic out of the bot layer.
+**Status: ⏳ PENDING**
 
-## Phase 5: Worker
+- Define database indexes
+- Add connection pooling
+- Redis caching (leaderboard, guild config, permissions)
+- Query monitoring
 
-Status: pending.
+## Phase 5: Dashboard
 
-- Add queue infrastructure.
-- Add jobs, retry policies, and DLQ.
+**Status: ⏳ PENDING**
 
-## Phase 6: Dashboard
+- Administration UI
+- API integration
+- Discord OAuth2 auth
 
-Status: pending.
+## Phase 6: Observability
 
-- Add administration UI.
-- Add API integration.
-- Add auth and operational views after backend boundaries are stable.
+**Status: ⏳ PENDING**
+
+- Winston structured logging
+- Prometheus metrics
+- OpenTelemetry tracing
+- Alerting rules
+
+## Phase 7: Sharding
+
+**Status: ⏳ PENDING**
+
+- Discord.js ShardingManager (needed at 2500+ guilds)
+- Shard communication via Redis
+- For 100K guilds: 40+ bot instances
+
+## Phase 8: Production Hardening
+
+**Status: ⏳ PENDING**
+
+- Database backups
+- Disaster recovery
+- Load testing
+- Security audit
+
+## Non-Negotiables (all phases)
+
+- No cyclic dependencies (contracts → core → database → bot → worker → dashboard)
+- Business logic only in `core` package
+- All DTOs validated with zod before Phase 2
+- 80%+ test coverage for any new code
+- Conventional commits

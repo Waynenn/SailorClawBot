@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.pnpm-store/
+*.tsbuildinfo
+packages/*/dist/
+packages/*/node_modules/
+SailorClawBot/node_modules/
+SailorClawBot/packages/*/dist/
+SailorClawBot/packages/*/node_modules/

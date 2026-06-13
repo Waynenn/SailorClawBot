@@ -47,6 +47,9 @@ importers:
       '@sailorclawbot/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@sailorclawbot/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       prisma:
         specifier: ^6.19.3
