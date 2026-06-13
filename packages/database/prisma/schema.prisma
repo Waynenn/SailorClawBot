@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Guild {
+  id        String        @id
+  name      String
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  members   GuildMember[]
+  profiles  Profile[]
+  wallets   Wallet[]
+  families  Family[]
+  tickets   Ticket[]
+}
+
+model GuildMember {
+  guildId  String
+  userId   String
+  joinedAt DateTime @default(now())
+  guild    Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@id([guildId, userId])
+}
+
+model Profile {
+  id          String   @id @default(cuid())
+  guildId     String
+  userId      String
+  displayName String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  guild       Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId])
+}
+
+model Wallet {
+  id           String        @id @default(cuid())
+  guildId      String
+  userId       String
+  balance      BigInt        @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  guild        Guild         @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@unique([guildId, userId])
+}
+
+model Transaction {
+  id        String   @id @default(cuid())
+  walletId  String
+  amount    BigInt
+  reason    String
+  createdAt DateTime @default(now())
+  wallet    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
+model Family {
+  id          String   @id @default(cuid())
+  guildId     String
+  name        String
+  ownerUserId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  guild       Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, name])
+}
+
+model Ticket {
+  id             String       @id @default(cuid())
+  guildId        String
+  openedByUserId String
+  channelId      String?
+  status         TicketStatus @default(open)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  guild          Guild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
+}
+
+enum TicketStatus {
+  open
+  closed
+}
