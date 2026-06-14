@@ -55,7 +55,7 @@ export class TwitchPoller {
     return this.token;
   }
 
-  private async fetchLiveStreams(logins: string[]): Promise<TwitchStream[]> {
+  private async fetchLiveStreams(logins: string[], retried = false): Promise<TwitchStream[]> {
     if (logins.length === 0) return [];
     const token = await this.getToken();
     const params = logins.map((l) => `user_login=${encodeURIComponent(l)}`).join('&');
@@ -66,9 +66,9 @@ export class TwitchPoller {
       },
     });
     if (res.status === 401) {
-      // Token expired — reset and retry once
+      if (retried) throw new Error('Twitch token invalid after refresh — check TWITCH_CLIENT_ID/SECRET');
       this.token = null;
-      return this.fetchLiveStreams(logins);
+      return this.fetchLiveStreams(logins, true);
     }
     if (!res.ok) throw new Error(`Twitch streams API failed: ${res.status}`);
     const data = (await res.json()) as { data: TwitchStream[] };

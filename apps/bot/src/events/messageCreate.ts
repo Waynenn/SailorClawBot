@@ -3,7 +3,6 @@ import { EmbedBuilder } from 'discord.js';
 import type { Container } from '../container.js';
 import { EMBED_COLORS } from '../lib/embedColors.js';
 
-// in-memory cooldown: key = `${guildId}:${userId}`, value = last grant timestamp ms
 const xpCooldowns = new Map<string, number>();
 
 export function registerMessageCreateHandler(client: Client, container: Container): void {
@@ -14,26 +13,25 @@ export function registerMessageCreateHandler(client: Client, container: Containe
     const userId = message.author.id;
 
     const settings = await container.guildSettingsRepo.findByGuild(guildId);
-    const xpEnabled = settings?.xpEnabled ?? true;
-    if (!xpEnabled) return;
+    if (!(settings?.xpEnabled ?? true)) return;
 
+    // Check NoXp exclusions BEFORE consuming cooldown
+    const channelExcluded = await container.noXpTargetRepo.isExcluded(guildId, message.channelId);
+    if (channelExcluded) return;
+
+    const memberRoleIds = message.member?.roles.cache.map((r) => r.id) ?? [];
+    for (const roleId of memberRoleIds) {
+      if (await container.noXpTargetRepo.isExcluded(guildId, roleId)) return;
+    }
+
+    // Cooldown check + stamp (synchronous — no await between read and write)
     const cooldownSecs = settings?.xpCooldown ?? 60;
     const key = `${guildId}:${userId}`;
     const now = Date.now();
     if (now - (xpCooldowns.get(key) ?? 0) < cooldownSecs * 1000) return;
     xpCooldowns.set(key, now);
 
-    // Check NoXp for channel
-    const channelExcluded = await container.noXpTargetRepo.isExcluded(guildId, message.channelId);
-    if (channelExcluded) return;
-
-    // Check NoXp for any of user's roles
-    const memberRoleIds = message.member?.roles.cache.map((r) => r.id) ?? [];
-    for (const roleId of memberRoleIds) {
-      if (await container.noXpTargetRepo.isExcluded(guildId, roleId)) return;
-    }
-
-    // Compute XP multiplier (channel takes priority over role; highest wins)
+    // Compute XP multiplier (highest wins across channel + roles)
     let multiplier = 1.0;
     const channelMult = await container.xpMultiplierRepo.findByTarget(guildId, message.channelId);
     if (channelMult) multiplier = channelMult.multiplier;
@@ -52,13 +50,11 @@ export function registerMessageCreateHandler(client: Client, container: Containe
     const { leveled, newLevel, profile } = await container.xpService.grantXp(guildId, userId, amount);
     if (!leveled) return;
 
-    // Assign LevelRole if configured
     const levelRole = await container.levelRoleRepo.findByLevel(guildId, newLevel);
     if (levelRole && message.member) {
       await message.member.roles.add(levelRole.roleId).catch(() => null);
     }
 
-    // Build level-up embed
     const template = settings?.levelUpMessage ?? 'GG {mention}, you reached level **{level}**!';
     const description = template
       .replace('{mention}', `<@${userId}>`)

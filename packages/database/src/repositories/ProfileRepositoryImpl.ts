@@ -90,7 +90,7 @@ export class ProfileRepositoryImpl implements ProfileRepository {
 
   public async findLeaderboard(guildId: SnowflakeId, skip: number, take: number): Promise<ProfileDto[]> {
     const rows = await this.db.profile.findMany({
-      where: { guildId },
+      where: { guildId, totalXp: { gt: 0 } },
       orderBy: { totalXp: 'desc' },
       skip,
       take,
@@ -99,7 +99,7 @@ export class ProfileRepositoryImpl implements ProfileRepository {
   }
 
   public async countByGuild(guildId: SnowflakeId): Promise<number> {
-    return this.db.profile.count({ where: { guildId } });
+    return this.db.profile.count({ where: { guildId, totalXp: { gt: 0 } } });
   }
 
   public async findRank(guildId: SnowflakeId, userId: SnowflakeId): Promise<number> {
