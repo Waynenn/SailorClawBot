@@ -27,9 +27,10 @@ export class BanRepositoryImpl implements BanRepository {
       throw new ValidationError('User ID cannot be empty', 'userId');
     }
     const row = await this.db.ban.findFirst({
-      where: { guildId, userId },
+      where: { guildId, userId, isActive: true },
       orderBy: { createdAt: 'desc' },
     });
+    if (row?.expiresAt && row.expiresAt < new Date()) return null;
     return row ? toBanDto(row) : null;
   }
 
@@ -37,11 +38,12 @@ export class BanRepositoryImpl implements BanRepository {
     if (!guildId || guildId.trim().length === 0) {
       throw new ValidationError('Guild ID cannot be empty', 'guildId');
     }
+    const now = new Date();
     const rows = await this.db.ban.findMany({
       where: { guildId, isActive: true },
       orderBy: { createdAt: 'desc' },
     });
-    return rows.map(toBanDto);
+    return rows.filter((r) => !r.expiresAt || r.expiresAt >= now).map(toBanDto);
   }
 
   public async create(input: Omit<BanDto, 'id' | 'createdAt'>): Promise<BanDto> {

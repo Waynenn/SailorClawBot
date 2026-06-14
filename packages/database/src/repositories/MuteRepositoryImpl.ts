@@ -30,6 +30,7 @@ export class MuteRepositoryImpl implements MuteRepository {
       where: { guildId, userId, isActive: true },
       orderBy: { createdAt: 'desc' },
     });
+    if (row?.expiresAt && row.expiresAt < new Date()) return null;
     return row ? toMuteDto(row) : null;
   }
 
@@ -37,11 +38,12 @@ export class MuteRepositoryImpl implements MuteRepository {
     if (!guildId || guildId.trim().length === 0) {
       throw new ValidationError('Guild ID cannot be empty', 'guildId');
     }
+    const now = new Date();
     const rows = await this.db.mute.findMany({
       where: { guildId, isActive: true },
       orderBy: { expiresAt: 'asc' },
     });
-    return rows.map(toMuteDto);
+    return rows.filter((r) => !r.expiresAt || r.expiresAt >= now).map(toMuteDto);
   }
 
   public async create(input: Omit<MuteDto, 'id' | 'createdAt'>): Promise<MuteDto> {

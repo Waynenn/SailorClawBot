@@ -74,10 +74,10 @@ export function registerMessageCreateHandler(client: Client, container: Containe
     }
 
     const targetChannelId = settings?.levelUpChannelId ?? message.channelId;
-    const targetChannel = targetChannelId === message.channelId
+    const rawTarget = targetChannelId === message.channelId
       ? message.channel
-      : await message.guild.channels.fetch(targetChannelId).catch(() => message.channel);
-
-    await (targetChannel as TextChannel).send({ embeds: [embed] }).catch(() => null);
+      : await message.guild.channels.fetch(targetChannelId).catch(() => null);
+    const sendChannel = ((rawTarget?.isTextBased() ? rawTarget : null) ?? message.channel) as TextChannel;
+    await sendChannel.send({ embeds: [embed] }).catch(() => null);
   });
 }

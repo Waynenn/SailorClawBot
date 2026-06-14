@@ -26,8 +26,8 @@ export async function handleCommandError(
   }
 
   if (interaction.deferred || interaction.replied) {
-    await interaction.editReply(message);
+    await interaction.editReply(message).catch(() => null);
   } else {
-    await interaction.reply({ content: message, ephemeral: true });
+    await interaction.reply({ content: message, ephemeral: true }).catch(() => null);
   }
 }

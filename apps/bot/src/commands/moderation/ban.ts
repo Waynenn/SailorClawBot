@@ -38,7 +38,8 @@ export const banCommand: Command = {
     try {
       const ban = await container.moderationService.banUser(guildId, target.id, reason, moderatorId, duration);
 
-      await guild.members.ban(target.id, { reason: `[Case #${ban.caseNumber}] ${reason}` }).catch(() => null);
+      const discordOk = await guild.members.ban(target.id, { reason: `[Case #${ban.caseNumber}] ${reason}` })
+        .then(() => true).catch(() => false);
 
       const expiry = ban.expiresAt instanceof Date
         ? `until <t:${Math.floor(ban.expiresAt.getTime() / 1000)}:R>`
@@ -54,6 +55,10 @@ export const banCommand: Command = {
           { name: 'Reason', value: reason }
         )
         .setTimestamp();
+
+      if (!discordOk) {
+        embed.addFields({ name: '⚠️ Warning', value: 'Logged in DB but Discord ban failed — check bot permissions.' });
+      }
 
       await interaction.editReply({ embeds: [embed] });
     } catch (error) {

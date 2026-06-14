@@ -15,7 +15,7 @@ export const profileCommand: Command = {
 
     const target = interaction.options.getUser('user') ?? interaction.user;
     const guildId = interaction.guildId!;
-    const member = interaction.guild?.members.cache.get(target.id);
+    const member = await interaction.guild?.members.fetch(target.id).catch(() => null);
 
     try {
       const profile = await container.profileService.ensureProfile(guildId, target.id);

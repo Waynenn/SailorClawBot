@@ -8,6 +8,7 @@ import { ValidationError } from '../common/errors/ValidationError.js';
 import { NotFoundError } from '../common/errors/NotFoundError.js';
 import { ConflictError } from '../common/errors/ConflictError.js';
 
+
 const NOW = new Date('2024-01-01T00:00:00Z');
 
 function makeWallet(overrides: Partial<WalletDto> = {}): WalletDto {
@@ -30,6 +31,7 @@ function createHarness(existingWallet: WalletDto | null = null) {
       wallet = { ...wallet, balance: wallet.balance + amount };
       return wallet;
     },
+    atomicTransfer: async () => { throw new Error('atomicTransfer not stubbed'); },
   };
 
   const transactions: TransactionRepository = {
@@ -119,6 +121,13 @@ test('transfer — moves funds between wallets', async () => {
       if (walletId === 'w_a') { walletA = { ...walletA, balance: walletA.balance + amount }; return walletA; }
       if (walletB) { walletB = { ...walletB, balance: walletB.balance + amount }; return walletB; }
       throw new Error('wallet not found');
+    },
+    atomicTransfer: async (_fromId, _toId, amount) => {
+      if (walletA.balance < amount) throw new ConflictError('Insufficient balance', 'INSUFFICIENT_BALANCE');
+      walletA = { ...walletA, balance: walletA.balance - amount };
+      if (!walletB) walletB = makeWallet({ id: 'w_b', userId: 'u_b', balance: 0n });
+      walletB = { ...walletB, balance: walletB.balance + amount };
+      return { from: walletA, to: walletB };
     },
   };
   const txs: TransactionDto[] = [];

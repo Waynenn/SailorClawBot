@@ -99,9 +99,18 @@ export class EconomyService {
     if (fromUserId === toUserId) throw new ValidationError('Cannot transfer to yourself', 'toUserId');
     if (!reason || reason.trim().length === 0) throw new ValidationError('Reason required', 'reason');
 
-    const from = await this.withdraw(guildId, fromUserId, amount, `Transfer to ${toUserId}: ${reason}`);
-    const to = await this.deposit(guildId, toUserId, amount, `Transfer from ${fromUserId}: ${reason}`);
+    const fromWallet = await this.wallets.findByGuildAndUser(guildId, fromUserId);
+    if (!fromWallet) throw new NotFoundError('Wallet', `${guildId}:${fromUserId}`);
+    const toWallet = await this.ensureWallet(guildId, toUserId);
 
+    const { from, to } = await this.wallets.atomicTransfer(fromWallet.id, toWallet.id, amount);
+
+    await Promise.allSettled([
+      this.transactions.create({ walletId: fromWallet.id, amount: -amount, reason: `Transfer to ${toUserId}: ${reason}` }),
+      this.transactions.create({ walletId: toWallet.id, amount, reason: `Transfer from ${fromUserId}: ${reason}` }),
+    ]);
+
+    this.logger.info('Transfer', { guildId, fromUserId, toUserId, amount: amount.toString() });
     await this.bus.publish({
       name: EventNames.EconomyTransferred,
       payload: { guildId, fromUserId, toUserId, amount, reason },

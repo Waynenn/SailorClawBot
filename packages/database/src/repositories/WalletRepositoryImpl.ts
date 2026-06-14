@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import type { WalletRepository, WalletDto, SnowflakeId } from '@sailorclawbot/contracts';
-import { ValidationError } from '@sailorclawbot/core';
+import { ValidationError, ConflictError } from '@sailorclawbot/core';
 import { translatePrismaError } from './prisma-errors.js';
 
 function toWalletDto(row: { id: string; guildId: string; userId: string; balance: bigint; createdAt: Date; updatedAt: Date }): WalletDto {
@@ -65,5 +65,23 @@ export class WalletRepositoryImpl implements WalletRepository {
     } catch (error) {
       translatePrismaError(error, 'adjust wallet balance');
     }
+  }
+
+  public async atomicTransfer(
+    fromWalletId: string,
+    toWalletId: string,
+    amount: bigint
+  ): Promise<{ from: WalletDto; to: WalletDto }> {
+    return this.db.$transaction(async (tx) => {
+      const from = await tx.wallet.findUnique({ where: { id: fromWalletId } });
+      if (!from || from.balance < amount) {
+        throw new ConflictError('Insufficient balance', 'INSUFFICIENT_BALANCE');
+      }
+      const [updatedFrom, updatedTo] = await Promise.all([
+        tx.wallet.update({ where: { id: fromWalletId }, data: { balance: { decrement: amount } } }),
+        tx.wallet.update({ where: { id: toWalletId }, data: { balance: { increment: amount } } }),
+      ]);
+      return { from: toWalletDto(updatedFrom), to: toWalletDto(updatedTo) };
+    });
   }
 }

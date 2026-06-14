@@ -35,9 +35,9 @@ export const kickCommand: Command = {
       const result = await container.moderationService.kickUser(guildId, target.id, reason, moderatorId);
 
       const targetMember = await guild.members.fetch(target.id).catch(() => null);
-      if (targetMember) {
-        await targetMember.kick(`[Case #${result.caseNumber}] ${reason}`).catch(() => null);
-      }
+      const discordOk = targetMember
+        ? await targetMember.kick(`[Case #${result.caseNumber}] ${reason}`).then(() => true).catch(() => false)
+        : null;
 
       const embed = new EmbedBuilder()
         .setColor(EMBED_COLORS.punitive)
@@ -48,6 +48,10 @@ export const kickCommand: Command = {
           { name: 'Reason', value: reason }
         )
         .setTimestamp();
+
+      if (discordOk === false) {
+        embed.addFields({ name: '⚠️ Warning', value: 'Logged in DB but Discord kick failed — check bot permissions.' });
+      }
 
       await interaction.editReply({ embeds: [embed] });
     } catch (error) {
