@@ -1,4 +1,4 @@
-import type { Warning, Mute, Ban, Case, PermissionOverride } from '@prisma/client';
+import type { Warning, Mute, Ban, Case, PermissionOverride, Guild, GuildMember, Profile } from '@prisma/client';
 import type {
   WarningDto,
   MuteDto,
@@ -6,6 +6,9 @@ import type {
   CaseDto,
   ModerationType,
   PermissionOverrideDto,
+  GuildDto,
+  GuildMemberDto,
+  ProfileDto,
 } from '@sailorclawbot/contracts';
 
 /**
@@ -81,5 +84,33 @@ export function toPermissionOverrideDto(row: PermissionOverride): PermissionOver
     userId: row.userId,
     permission: row.permission,
     allowed: row.allowed,
+  };
+}
+
+export function toGuildDto(row: Guild): GuildDto {
+  return {
+    id: row.id,
+    name: row.name,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function toGuildMemberDto(row: GuildMember): GuildMemberDto {
+  return {
+    guildId: row.guildId,
+    userId: row.userId,
+    joinedAt: row.joinedAt,
+  };
+}
+
+export function toProfileDto(row: Profile): ProfileDto {
+  return {
+    id: row.id,
+    guildId: row.guildId,
+    userId: row.userId,
+    displayName: row.displayName,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
