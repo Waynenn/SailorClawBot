@@ -94,20 +94,28 @@ model GuildSettings {
   locale               String  @default("en")
 
   // Economy (BigInt for all monetary values)
-  currencyName         String  @default("coins")
-  currencyEmoji        String  @default("🪙")
-  dailyAmount          BigInt  @default(100)
-  startingBalance      BigInt  @default(0)
-  workMin              BigInt  @default(50)
-  workMax              BigInt  @default(200)
-  crimeMin             BigInt  @default(100)
-  crimeMax             BigInt  @default(500)
-  gamblingMinBet       BigInt  @default(10)
-  gamblingMaxBet       BigInt  @default(10000)
-  robMinTargetBalance  BigInt  @default(100)
-  treasuryBalance      BigInt  @default(0)  // accumulated transfer taxes
-  transferTaxPercent   Int     @default(5)   // % — Int OK (0-100 range)
-  shopTaxPercent       Int     @default(0)   // % — Int OK
+  currencyName            String  @default("coins")
+  currencyEmoji           String  @default("🪙")
+  dailyAmount             BigInt  @default(100)
+  startingBalance         BigInt  @default(0)
+  workMin                 BigInt  @default(50)
+  workMax                 BigInt  @default(200)
+  crimeMin                BigInt  @default(100)
+  crimeMax                BigInt  @default(500)
+  gamblingMinBet          BigInt  @default(10)
+  gamblingMaxBet          BigInt  @default(10000)
+  robMinTargetBalance     BigInt  @default(100)
+  treasuryBalance         BigInt  @default(0)   // accumulated transfer taxes
+  transferTaxPercent      Int     @default(5)    // % — Int OK (0-100 range)
+  shopTaxPercent          Int     @default(0)
+  // Anti-inflation limits
+  dailyWorkLimit          Int     @default(3)    // max work uses per day
+  dailyCrimeLimit         Int     @default(2)    // max crime uses per day
+  workDiminishingFactor   Float   @default(0.5)  // each next work = prev * factor
+  crimeDiminishingFactor  Float   @default(0.5)
+  // Family economy
+  familyCreationCost      BigInt  @default(5000)
+  familyNameChangeCost    BigInt  @default(2000)
 }
 
 // NOTE: Guild model needs back-relation added:
@@ -250,13 +258,17 @@ rating      Int?     // 1-5
 subject     String?
 ```
 
-### Wallet model additions (economy cooldowns)
+### Wallet model additions (economy cooldowns + daily limits)
 ```prisma
 // Add to existing Wallet:
-lastDailyAt  DateTime?
-lastWorkAt   DateTime?
-lastCrimeAt  DateTime?
-lastRobAt    DateTime?
+lastDailyAt      DateTime?
+lastWorkAt       DateTime?
+lastCrimeAt      DateTime?
+lastRobAt        DateTime?
+workUsesToday    Int       @default(0)   // resets lazily at midnight UTC
+crimeUsesToday   Int       @default(0)
+dailyLimitReset  DateTime?              // date of last reset (lazy reset)
+activeBoosts     Json      @default("[]") // [{type, multiplier, expiresAt}]
 ```
 
 ---
@@ -343,27 +355,105 @@ tax goes to:    guild treasury (GuildSettings.treasuryBalance BigInt, optional d
 
 No tax on: daily, work, gambling winnings, XP rewards.
 
+#### Anti-inflation system
+
+**Problem:** hourly cooldown alone allows 24 work uses/day = up to 4800 coins. After 30 days = ~300K. Economy inflates.
+
+**Solution: daily use limits + diminishing returns**
+
+```
+Work uses per day:    max dailyWorkLimit (default 3)
+Crime uses per day:   max dailyCrimeLimit (default 2)
+Diminishing returns:  each use earns prev_reward * diminishingFactor (default 0.5)
+```
+
+Example with defaults:
+```
+Work 1: 50-200 coins  (100% payout)
+Work 2: 25-100 coins  (50%)
+Work 3: 12-50 coins   (25%)
+Daily total work max: ~350 coins
+
+Crime 1: 100-500 coins (100%)
+Crime 2: 50-250 coins  (50%)
+Daily total crime max: ~750 coins
+
+Daily:   100 coins
+Gambling: net negative (house edge drains ~5-10%)
+Rob:      zero-sum (no new money created)
+
+MAX income per day (perfect play): ~1200 coins
+```
+
+Daily counter reset: **lazy reset** — on each work/crime call, check if `dailyLimitReset` date < today UTC → reset counts to 0 first.
+
+**Money sinks (where money leaves economy):**
+| Sink | Drain rate |
+|------|-----------|
+| Transfer tax (5%) | Every transfer |
+| Gambling house edge | ~5-10% of bet per game |
+| Shop purchases (roles, badges, boosts) | Configurable prices |
+| Family creation | 5000 coins one-time |
+| Family name change | 2000 coins |
+| Consumable items expire | Repurchase needed |
+| Profile cosmetics | 200-2000 coins |
+
 #### Cooldowns (persisted in Wallet model)
-| Action | Field | Duration |
-|--------|-------|----------|
-| `/daily` | `lastDailyAt` | 24h |
-| `/work` | `lastWorkAt` | 1h |
-| `/crime` | `lastCrimeAt` | 2h |
-| `/rob @user` | `lastRobAt` | 4h |
+| Action | Field | Duration | Daily limit |
+|--------|-------|----------|-------------|
+| `/daily` | `lastDailyAt` | 24h | 1 |
+| `/work` | `lastWorkAt` | 1h | `dailyWorkLimit` (default 3) |
+| `/crime` | `lastCrimeAt` | 2h | `dailyCrimeLimit` (default 2) |
+| `/rob @user` | `lastRobAt` | 4h | unlimited (zero-sum) |
 
 #### Economy events
-- `/daily` → grant `GuildSettings.dailyAmount` (BigInt). Cooldown embed shows time remaining.
-- `/work` → random BigInt in `[workMin, workMax]`. Random job title in response embed.
-- `/crime` → 65% success: reward `[crimeMin, crimeMax]`. 35% failure: fine `floor(reward * 0.5n)`.
-- `/rob @user` → 40% success: steal `floor(target.balance * randomPercent / 100n)` where `randomPercent` ∈ [10, 30]. 60% failure: fine = 20% of intended steal. Target must have > `robMinBalance`.
+- `/daily` → grant `dailyAmount`. Shows time remaining if on cooldown.
+- `/work` → payout = `random(workMin, workMax) * diminishFactor^(useIndex)`. Random job title. Shows uses remaining today.
+- `/crime` → 65% success: `random(crimeMin, crimeMax) * diminishFactor^(useIndex)`. 35% fail: fine = `floor(reward * 0.5n)`. Shows uses remaining.
+- `/rob @user` → 40% success: steal `random(10n, 30n) * target.balance / 100n`. 60% fail: fine = 20% of intended amount. Zero-sum (no new money).
 
-#### Gambling (house edge built in)
+#### Shop item types
+
+```typescript
+type ItemType =
+  | 'role'         // assign Discord role on purchase
+  | 'badge'        // profile badge emoji/icon shown on /rank
+  | 'frame'        // rank card border frame
+  | 'background'   // rank card background image/color
+  | 'xp_boost'     // temporary XP multiplier (stored in Wallet.activeBoosts)
+  | 'color'        // username color in rank card
+  | 'family_slot'  // grants ability to create a family (checks on /family create)
+  | 'name_change'  // grants one display name change (profile or family)
+  | 'consumable'   // admin-defined one-time use
+```
+
+**Effect JSON per type:**
+```json
+{ "type": "role",        "effect": { "roleId": "123456789" } }
+{ "type": "badge",       "effect": { "emoji": "🌟" } }
+{ "type": "frame",       "effect": { "frameKey": "gold" } }
+{ "type": "background",  "effect": { "backgroundKey": "space" } }
+{ "type": "xp_boost",    "effect": { "multiplier": 2.0, "durationHours": 1 } }
+{ "type": "family_slot", "effect": {} }
+{ "type": "name_change", "effect": { "target": "profile" } }
+```
+
+**Family economy integration:**
+- `/family create` → requires `family_slot` item in inventory OR costs `familyCreationCost` coins directly (admin configures which)
+- `/family rename` → costs `familyNameChangeCost` coins
+- Both configurable in Dashboard
+
+**Commands:** `/daily`, `/work`, `/crime`, `/rob @user`, `/coinflip heads|tails <amount>`, `/slots <amount>`, `/blackjack <amount>` (Hit/Stand/Double buttons), `/roulette <red|black|0-36> <amount>`, `/shop [page]`, `/buy <item>`, `/sell <item>`, `/inventory`
+
+#### Gambling (house edge = passive money sink)
 | Game | House edge | Notes |
 |------|-----------|-------|
-| `/coinflip` | 0% | True 50/50. Net-zero expectation. |
+| `/coinflip` | ~2% | Win pays 0.98x. Tiny sink to prevent 50/50 grinding. |
 | `/slots` | ~10% | Payout table sums to 90% expected return. |
 | `/blackjack` | ~3% | Standard rules (dealer hits on 16, stands on 17). |
 | `/roulette` | ~5% | 19 red/black, 1 zero (house). Number pays 18x. |
+
+House edge money does NOT go to treasury — it is burned (removed from economy). This is deflationary.
 
 All gambling amounts: BigInt. Winnings calculated as BigInt multiplication then division. No float arithmetic.
 
