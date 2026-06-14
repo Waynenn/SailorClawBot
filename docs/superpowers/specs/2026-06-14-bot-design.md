@@ -116,6 +116,12 @@ model GuildSettings {
   // Family economy
   familyCreationCost      BigInt  @default(5000)
   familyNameChangeCost    BigInt  @default(2000)
+  // Family limits (anti-overflow)
+  familyCreationEnabled   Boolean @default(true)
+  maxFamilies             Int?               // null = unlimited
+  maxFamilyMembers        Int     @default(20)
+  familyRequireApproval   Boolean @default(false) // invite must be accepted
+  familyCreationMode      String  @default("coins") // "coins"|"item"|"both"
 }
 
 // NOTE: Guild model needs back-relation added:
@@ -218,6 +224,27 @@ model StarboardEntry {
   starCount      Int    @default(0)
   @@unique([guildId, originalMsgId])
 }
+
+// FamilyMember — bot-level roles only, NO Discord roles created
+model FamilyMember {
+  id       String     @id @default(cuid())
+  guildId  String
+  familyId String
+  userId   String
+  role     FamilyRole @default(MEMBER)
+  joinedAt DateTime   @default(now())
+  family   Family     @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  @@unique([guildId, userId]) // one family per user per guild
+  @@index([familyId])
+}
+
+enum FamilyRole {
+  OWNER    // creator, full control
+  OFFICER  // can invite/kick members
+  MEMBER   // regular
+}
+
+// NOTE: Family model needs: members FamilyMember[], ownerId String
 
 model Achievement {
   id               String            @id @default(cuid())
@@ -523,16 +550,47 @@ Setup: `/reactionrole add <message_link> <emoji> @role` or via Dashboard panel.
 - If stars drop below threshold → delete starboard message, remove entry
 
 ### 4.7 Family / Clan (Phase 8)
-Social structure — no bank, no quests, no bonuses.
+Social only — no bank, no quests, no bonuses. **No Discord roles created.**
 
-**Data:** name, leaderId, members (from GuildMember), createdAt
-**Family XP** = sum of `Profile.totalXp` of all members (computed, not stored)
+#### Member roles (bot-level only, stored in `FamilyMember.role`)
+| Role | Permissions |
+|------|------------|
+| `OWNER` | Disband, rename, promote, demote, transfer ownership, invite, kick all |
+| `OFFICER` | Invite members, kick MEMBERs only |
+| `MEMBER` | View info, leave |
 
-**Performance:** family leaderboard query is a grouped JOIN over Profile. Cache result per guild for 5 minutes (in-memory Map). Invalidate on any member XP change in that guild.
+One user = one family per guild (`@@unique([guildId, userId])` on `FamilyMember`).
 
-**Commands:** `/family create <name>`, `/family info [name]`, `/family join <name>`, `/family leave`, `/family invite @user`, `/family kick @user`, `/family top`
+#### Creation controls (Dashboard-configurable)
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| `familyCreationEnabled` | `true` | Master toggle |
+| `maxFamilies` | `null` (unlimited) | Hard cap per server |
+| `maxFamilyMembers` | `20` | Cap per family |
+| `familyCreationMode` | `"coins"` | `"coins"` / `"item"` / `"both"` |
+| `familyCreationCost` | `5000` | Coin cost |
+| `familyRequireApproval` | `false` | Invites need explicit accept |
 
-Family top embed: sorted by sum member XP, paginated.
+#### FamilyService methods
+- `createFamily(guildId, ownerId, name)` — validate limits + charge/consume, create, add OWNER
+- `disbandFamily(guildId, familyId, requesterId)` — OWNER only
+- `inviteMember(guildId, familyId, targetId, inviterId)` — OWNER/OFFICER, check maxMembers
+- `acceptInvite(guildId, familyId, userId)` — if requireApproval
+- `kickMember(guildId, familyId, targetId, kickerId)` — OWNER kicks all; OFFICER kicks MEMBER only
+- `promoteMember(guildId, familyId, targetId, promoterId)` — OWNER only (MEMBER→OFFICER)
+- `demoteMember(guildId, familyId, targetId, demoterId)` — OWNER only (OFFICER→MEMBER)
+- `transferOwnership(guildId, familyId, newOwnerId, currentOwnerId)` — old OWNER→OFFICER
+- `renameFamily(guildId, familyId, newName, requesterId)` — OWNER only, costs `familyNameChangeCost`
+- `leaveFamily(guildId, userId)` — OWNER must transfer or disband first
+- `getFamilyLeaderboard(guildId)` — JOIN Profile, SUM totalXp GROUP BY family (cache 5min)
+
+#### Commands
+`/family create <name>`, `/family disband`, `/family info [name]`, `/family join <name>`, `/family leave`, `/family invite @user`, `/family kick @user`, `/family promote @user`, `/family demote @user`, `/family transfer @user`, `/family rename <name>`, `/family top`
+
+Family info embed: name, owner, officer list, member count/max, total XP, rank on server.
+Family top embed: top 10 families by total member XP, paginated, color `0x9b59b6`.
+
+**Performance:** leaderboard = grouped JOIN over Profile. Cache 5min in-memory per guild. Invalidate on member XP change.
 
 ### 4.8 Achievements (Phase 11)
 Predefined set (20+), checked at key events:

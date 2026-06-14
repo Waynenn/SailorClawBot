@@ -277,17 +277,30 @@ Button interactions:
 
 ## PHASE 8 — Family / Clan
 
-**No family bank, no quests, no bonuses. Social only.**
+**Social only. No Discord roles created. Bot-level roles: OWNER / OFFICER / MEMBER.**
+
+### Schema prerequisite (add in 2.5 migration)
+- `FamilyMember` table with `role FamilyRole` enum
+- `FamilyRole` enum: `OWNER | OFFICER | MEMBER`
+- `@@unique([guildId, userId])` — one family per user per guild
+- Add to `Family`: `ownerId String`, `members FamilyMember[]`
 
 ### FamilyService extensions
-- `getFamilyLeaderboard(guildId)` → join Profile, sum `totalXp`, group by family
-- `inviteMember(guildId, familyId, userId, inviterId)`
-- `kickMember(guildId, familyId, userId, kickerId)` — leader only
+- `createFamily` — checks `maxFamilies`, `familyCreationEnabled`, charges per `familyCreationMode`
+- `disbandFamily` — OWNER only
+- `inviteMember` / `acceptInvite` — OWNER/OFFICER, checks `maxFamilyMembers`
+- `kickMember` — OWNER kicks all; OFFICER kicks MEMBER only
+- `promoteMember` / `demoteMember` — OWNER only
+- `transferOwnership` — OWNER only
+- `renameFamily` — OWNER, costs `familyNameChangeCost`
+- `leaveFamily` — OWNER must transfer or disband first
+- `getFamilyLeaderboard` — SUM totalXp per family, cache 5min
 
 ### Commands
-`/family create <name>`, `/family info [name]`, `/family join <name>`, `/family leave`, `/family invite @user`, `/family kick @user`, `/family top`
+`/family create <name>`, `/family disband`, `/family info [name]`, `/family join <name>`, `/family leave`, `/family invite @user`, `/family kick @user`, `/family promote @user`, `/family demote @user`, `/family transfer @user`, `/family rename <name>`, `/family top`
 
-Family top embed: top 10 families by total member XP, color `0x9b59b6`.
+### Dashboard page
+Anti-overflow controls: enable/disable creation, max families, max members, creation mode (coins/item/both), require approval toggle.
 
 ---
 
