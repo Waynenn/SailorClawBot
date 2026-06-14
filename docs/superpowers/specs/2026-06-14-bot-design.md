@@ -93,11 +93,21 @@ model GuildSettings {
   // Locale
   locale               String  @default("en")
 
-  // Economy
+  // Economy (BigInt for all monetary values)
   currencyName         String  @default("coins")
   currencyEmoji        String  @default("🪙")
-  dailyAmount          Int     @default(100)
-  startingBalance      Int     @default(0)
+  dailyAmount          BigInt  @default(100)
+  startingBalance      BigInt  @default(0)
+  workMin              BigInt  @default(50)
+  workMax              BigInt  @default(200)
+  crimeMin             BigInt  @default(100)
+  crimeMax             BigInt  @default(500)
+  gamblingMinBet       BigInt  @default(10)
+  gamblingMaxBet       BigInt  @default(10000)
+  robMinTargetBalance  BigInt  @default(100)
+  treasuryBalance      BigInt  @default(0)  // accumulated transfer taxes
+  transferTaxPercent   Int     @default(5)   // % — Int OK (0-100 range)
+  shopTaxPercent       Int     @default(0)   // % — Int OK
 }
 
 // NOTE: Guild model needs back-relation added:
@@ -285,21 +295,84 @@ Permission check order:
 **XP multiplier priority:** role multiplier > channel multiplier > 1.0
 
 ### 4.3 Economy Extended (Phase 4)
-**Cooldowns:** daily (24h), weekly (7d), work (1h), crime (2h), rob (4h)
 
-**Gambling:**
-- `/coinflip heads|tails amount` — 50/50
-- `/slots amount` — 3-reel, 5 symbols, configurable payouts
-- `/blackjack amount` — vs dealer, stand/hit buttons
-- `/roulette amount red|black|number` — standard roulette
+#### BigInt usage
+All monetary values stored and passed as `BigInt`. Never use `number` for balances, bets, prices, or amounts. Prisma already uses `BigInt` for `Wallet.balance` and `Transaction.amount`.
 
-**Economy events:**
-- `/daily` — `dailyAmount` from GuildSettings
-- `/work` — random job, random amount (min/max configurable)
-- `/crime` — higher reward, chance of fine
-- `/rob @user` — steal % of balance, chance of backfire
+Additional schema fields that must be `BigInt`:
+```prisma
+// GuildSettings — change from Int to BigInt:
+dailyAmount      BigInt @default(100)
+startingBalance  BigInt @default(0)
+workMin          BigInt @default(50)
+workMax          BigInt @default(200)
+crimeMin         BigInt @default(100)
+crimeMax         BigInt @default(500)
+gamblingMinBet   BigInt @default(10)
+gamblingMaxBet   BigInt @default(10000)
 
-**Shop:** `/shop`, `/buy <item>`, `/sell <item>`, `/inventory`
+// Item — already BigInt:
+price  BigInt  // ✅
+```
+
+#### Anti-cheat rules (enforced in EconomyService, all atomic via prisma.$transaction)
+
+| Rule | Implementation |
+|------|---------------|
+| Positive amounts only | `if (amount <= 0n) throw ValidationError` |
+| No self-transfer | `if (fromId === toId) throw ValidationError` |
+| Sufficient funds check | Atomic DB-level: debit fails if `balance < amount` |
+| No negative balance | Balance never goes below `0n` — service throws `ValidationError('Insufficient funds')` |
+| Bet within bounds | `if (amount < gamblingMinBet \|\| amount > gamblingMaxBet) throw ValidationError` |
+| Rob minimum target balance | Target must have `> robMinBalance` (default 100 coins) |
+| All writes atomic | Every balance change wrapped in `prisma.$transaction([...])` |
+
+#### Tax system (configurable in Dashboard)
+
+```
+transferTaxPercent: Int @default(5)   // % taken from transfer amount
+shopTaxPercent:     Int @default(0)   // % added to shop purchases
+```
+
+Transfer flow:
+```
+sender pays:    amount (full)
+receiver gets:  amount - floor(amount * taxRate / 100n)
+tax goes to:    guild treasury (GuildSettings.treasuryBalance BigInt, optional display)
+```
+
+No tax on: daily, work, gambling winnings, XP rewards.
+
+#### Cooldowns (persisted in Wallet model)
+| Action | Field | Duration |
+|--------|-------|----------|
+| `/daily` | `lastDailyAt` | 24h |
+| `/work` | `lastWorkAt` | 1h |
+| `/crime` | `lastCrimeAt` | 2h |
+| `/rob @user` | `lastRobAt` | 4h |
+
+#### Economy events
+- `/daily` → grant `GuildSettings.dailyAmount` (BigInt). Cooldown embed shows time remaining.
+- `/work` → random BigInt in `[workMin, workMax]`. Random job title in response embed.
+- `/crime` → 65% success: reward `[crimeMin, crimeMax]`. 35% failure: fine `floor(reward * 0.5n)`.
+- `/rob @user` → 40% success: steal `floor(target.balance * randomPercent / 100n)` where `randomPercent` ∈ [10, 30]. 60% failure: fine = 20% of intended steal. Target must have > `robMinBalance`.
+
+#### Gambling (house edge built in)
+| Game | House edge | Notes |
+|------|-----------|-------|
+| `/coinflip` | 0% | True 50/50. Net-zero expectation. |
+| `/slots` | ~10% | Payout table sums to 90% expected return. |
+| `/blackjack` | ~3% | Standard rules (dealer hits on 16, stands on 17). |
+| `/roulette` | ~5% | 19 red/black, 1 zero (house). Number pays 18x. |
+
+All gambling amounts: BigInt. Winnings calculated as BigInt multiplication then division. No float arithmetic.
+
+#### Shop
+- Buy: atomic check `balance >= price` → debit `price * (1 + shopTaxPercent/100)` → create InventoryItem
+- Sell: credit `floor(price * 0.5n)` (50% resale value, configurable)
+- Role items: on buy → assign Discord role via bot. On sell → remove role.
+
+**Commands:** `/daily`, `/work`, `/crime`, `/rob @user`, `/coinflip heads|tails <amount>`, `/slots <amount>`, `/blackjack <amount>` (Hit/Stand/Double buttons), `/roulette <red|black|0-36> <amount>`, `/shop [page]`, `/buy <item>`, `/sell <item>`, `/inventory`
 
 ### 4.4 Ticket System (Phase 5)
 **Flow:**
