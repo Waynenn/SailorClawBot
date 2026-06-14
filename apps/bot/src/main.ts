@@ -6,6 +6,8 @@ import { muteCommand } from './commands/moderation/mute.js';
 import { unmuteCommand } from './commands/moderation/unmute.js';
 import { banCommand } from './commands/moderation/ban.js';
 import { unbanCommand } from './commands/moderation/unban.js';
+import { kickCommand } from './commands/moderation/kick.js';
+import { casesCommand } from './commands/moderation/cases.js';
 import { balanceCommand } from './commands/economy/balance.js';
 import { transferCommand } from './commands/economy/transfer.js';
 import { profileCommand } from './commands/profile/profile.js';
@@ -20,6 +22,8 @@ const ALL_COMMANDS: Command[] = [
   unmuteCommand,
   banCommand,
   unbanCommand,
+  kickCommand,
+  casesCommand,
   balanceCommand,
   transferCommand,
   profileCommand,
@@ -37,6 +41,7 @@ export async function startBot(): Promise<void> {
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildModeration,
+      GatewayIntentBits.MessageContent,
     ],
   });
 

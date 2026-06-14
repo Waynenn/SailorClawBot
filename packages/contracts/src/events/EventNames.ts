@@ -24,6 +24,7 @@ export const EventNames = {
   ModerationUnmuted: 'moderation.unmuted',
   ModerationBanned: 'moderation.banned',
   ModerationUnbanned: 'moderation.unbanned',
+  ModerationKicked: 'moderation.kicked',
   ModerationCaseCreated: 'moderation.case_created',
   ModerationCaseAppealed: 'moderation.case_appealed',
   ModerationCaseResolved: 'moderation.case_resolved',

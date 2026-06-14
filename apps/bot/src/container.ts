@@ -10,6 +10,7 @@ import {
   BanRepositoryImpl,
   CaseRepositoryImpl,
   PermissionRepositoryImpl,
+  RoleMappingRepositoryImpl,
   TicketRepositoryImpl,
   FamilyRepositoryImpl,
 } from '@sailorclawbot/database';
@@ -40,6 +41,7 @@ function buildContainer() {
   const banRepo = new BanRepositoryImpl(prisma);
   const caseRepo = new CaseRepositoryImpl(prisma);
   const permissionRepo = new PermissionRepositoryImpl(prisma);
+  const roleMappingRepo = new RoleMappingRepositoryImpl(prisma);
   const ticketRepo = new TicketRepositoryImpl(prisma);
   const familyRepo = new FamilyRepositoryImpl(prisma);
 
@@ -49,7 +51,7 @@ function buildContainer() {
   const economyService = new EconomyService(walletRepo, transactionRepo, eventBus, logger);
   const ticketService = new TicketService(ticketRepo, eventBus, logger);
   const familyService = new FamilyService(familyRepo, logger);
-  const permissionService = new PermissionService(permissionRepo);
+  const permissionService = new PermissionService(permissionRepo, roleMappingRepo);
 
   return {
     prisma,

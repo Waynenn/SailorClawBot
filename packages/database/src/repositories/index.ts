@@ -12,3 +12,4 @@ export * from './MuteRepositoryImpl.js';
 export * from './BanRepositoryImpl.js';
 export * from './CaseRepositoryImpl.js';
 export * from './PermissionRepositoryImpl.js';
+export * from './RoleMappingRepositoryImpl.js';

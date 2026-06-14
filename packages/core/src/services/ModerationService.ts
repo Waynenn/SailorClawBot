@@ -7,30 +7,22 @@ import type {
   WarningDto,
   MuteDto,
   BanDto,
+  CaseDto,
   SnowflakeId,
 } from '@sailorclawbot/contracts';
 import type { EventBus } from '../common/events/EventBus.js';
 import type { Logger } from '../common/logging/Logger.js';
 import { ConflictError } from '../common/errors/ConflictError.js';
-import { PermissionDeniedError } from '../common/errors/PermissionDeniedError.js';
 import { ValidationError } from '../common/errors/ValidationError.js';
 
-/** Number of warnings that triggers an automatic mute. */
 const AUTO_MUTE_THRESHOLD = 3;
-/** Auto-mute duration in minutes (24h). */
 const AUTO_MUTE_DURATION = 1440;
 
 /**
  * ModerationService orchestrates all moderation operations.
  *
- * Responsibilities:
- * - Validate moderator permissions and inputs
- * - Execute warnings, mutes, bans (and their reversals)
- * - Allocate sequential case numbers via CaseRepository
- * - Emit domain events for downstream consumers (logging, Discord side-effects)
- *
- * It depends only on repository interfaces from `@sailorclawbot/contracts`,
- * never on Prisma — keeping business logic free of persistence concerns.
+ * Permission checks are the responsibility of the caller (bot command layer).
+ * This service focuses purely on business logic and persistence.
  */
 export class ModerationService {
   public constructor(
@@ -62,7 +54,6 @@ export class ModerationService {
     if (userId === moderatorId) {
       throw new ValidationError('Cannot warn yourself', 'userId');
     }
-    await this.assertCanModerate(guildId, moderatorId, { action: 'warn', userId });
 
     const caseNumber = await this.cases.getNextCaseNumber(guildId);
 
@@ -119,7 +110,6 @@ export class ModerationService {
     if (durationMinutes <= 0) {
       throw new ValidationError('Duration must be positive', 'durationMinutes');
     }
-    await this.assertCanModerate(guildId, moderatorId, { action: 'mute', userId });
 
     const existing = await this.mutes.findByGuildAndUser(guildId, userId);
     if (existing?.isActive) {
@@ -173,7 +163,6 @@ export class ModerationService {
     this.requireId(guildId, 'guildId');
     this.requireId(userId, 'userId');
     this.requireId(moderatorId, 'moderatorId');
-    await this.assertCanModerate(guildId, moderatorId, { action: 'unmute', userId });
 
     const mute = await this.mutes.findByGuildAndUser(guildId, userId);
     if (!mute || !mute.isActive) {
@@ -210,7 +199,6 @@ export class ModerationService {
     if (durationDays !== undefined && durationDays <= 0) {
       throw new ValidationError('Duration must be positive', 'durationDays');
     }
-    await this.assertCanModerate(guildId, moderatorId, { action: 'ban', userId });
 
     const existing = await this.bans.findByGuildAndUser(guildId, userId);
     if (existing?.isActive) {
@@ -251,15 +239,7 @@ export class ModerationService {
 
     await this.eventBus.publish({
       name: 'moderation.banned',
-      payload: {
-        guildId,
-        userId,
-        moderatorId,
-        reason,
-        caseNumber,
-        temporary: durationDays !== undefined,
-        expiresAt,
-      },
+      payload: { guildId, userId, moderatorId, reason, caseNumber, temporary: durationDays !== undefined, expiresAt },
       occurredAt: new Date(),
     });
     this.logger.info('User banned', { guildId, userId, moderatorId, caseNumber });
@@ -275,7 +255,6 @@ export class ModerationService {
     this.requireId(guildId, 'guildId');
     this.requireId(userId, 'userId');
     this.requireId(moderatorId, 'moderatorId');
-    await this.assertCanModerate(guildId, moderatorId, { action: 'unban', userId });
 
     const ban = await this.bans.findByGuildAndUser(guildId, userId);
     if (!ban || !ban.isActive) {
@@ -293,6 +272,66 @@ export class ModerationService {
   }
 
   // ==========================================================================
+  // KICK
+  // ==========================================================================
+
+  public async kickUser(
+    guildId: SnowflakeId,
+    userId: SnowflakeId,
+    reason: string,
+    moderatorId: SnowflakeId
+  ): Promise<{ caseNumber: number }> {
+    this.requireId(guildId, 'guildId');
+    this.requireId(userId, 'userId');
+    this.requireId(moderatorId, 'moderatorId');
+    if (!reason || reason.trim().length === 0) {
+      throw new ValidationError('Reason required', 'reason');
+    }
+    if (userId === moderatorId) {
+      throw new ValidationError('Cannot kick yourself', 'userId');
+    }
+
+    const caseNumber = await this.cases.getNextCaseNumber(guildId);
+
+    await this.cases.create({
+      guildId,
+      caseNumber,
+      type: 'kick',
+      userId,
+      moderatorId,
+      action: `kick:${caseNumber}`,
+      reason,
+      isAppealed: false,
+      metadata: undefined,
+    });
+
+    await this.eventBus.publish({
+      name: 'moderation.kicked',
+      payload: { guildId, userId, moderatorId, reason, caseNumber },
+      occurredAt: new Date(),
+    });
+    this.logger.info('User kicked', { guildId, userId, moderatorId, caseNumber });
+
+    return { caseNumber };
+  }
+
+  // ==========================================================================
+  // CASES
+  // ==========================================================================
+
+  public async listCases(
+    guildId: SnowflakeId,
+    userId?: SnowflakeId,
+    limit = 10
+  ): Promise<CaseDto[]> {
+    this.requireId(guildId, 'guildId');
+    if (userId) {
+      return this.cases.listByUser(guildId, userId, limit);
+    }
+    return this.cases.listByGuild(guildId, limit);
+  }
+
+  // ==========================================================================
   // HELPERS
   // ==========================================================================
 
@@ -302,65 +341,18 @@ export class ModerationService {
     }
   }
 
-  private async assertCanModerate(
-    guildId: SnowflakeId,
-    moderatorId: SnowflakeId,
-    context: Record<string, unknown>
-  ): Promise<void> {
-    if (!(await this.canModerate(guildId, moderatorId))) {
-      this.logger.warn('Permission denied', { guildId, moderatorId, ...context });
-      throw new PermissionDeniedError('User is not a moderator');
-    }
-  }
-
-  /**
-   * Checks whether a user may perform moderation actions.
-   *
-   * For now this consults explicit permission overrides; when no override
-   * exists it defaults to allow. Role-based checks (RoleMappingRepository)
-   * will tighten this in a later phase.
-   */
-  private async canModerate(guildId: SnowflakeId, userId: SnowflakeId): Promise<boolean> {
-    const override = await this.permissions.findByGuildUserPermission(
-      guildId,
-      userId,
-      'can_moderate'
-    );
-    if (override) {
-      return override.allowed;
-    }
-    return false;
-  }
-
-  /**
-   * Attempts an automatic mute after the warning threshold is reached.
-   * Swallows an "already muted" conflict so the originating warning still
-   * succeeds. Returns whether a mute was applied.
-   */
   private async tryAutoMute(
     guildId: SnowflakeId,
     userId: SnowflakeId,
     moderatorId: SnowflakeId,
     warningCount: number
   ): Promise<boolean> {
-    this.logger.info('Auto-muting user after warning threshold', {
-      guildId,
-      userId,
-      warningCount,
-    });
+    this.logger.info('Auto-muting user after warning threshold', { guildId, userId, warningCount });
     try {
-      await this.muteUser(
-        guildId,
-        userId,
-        AUTO_MUTE_DURATION,
-        moderatorId,
-        `Auto-mute: ${warningCount}+ warnings`
-      );
+      await this.muteUser(guildId, userId, AUTO_MUTE_DURATION, moderatorId, `Auto-mute: ${warningCount}+ warnings`);
       return true;
     } catch (error) {
-      if (error instanceof ConflictError || error instanceof PermissionDeniedError) {
-        return false;
-      }
+      if (error instanceof ConflictError) return false;
       throw error;
     }
   }

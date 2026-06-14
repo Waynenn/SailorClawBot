@@ -16,7 +16,6 @@ import { ModerationService } from './ModerationService.js';
 import type { EventBus, DomainEvent } from '../common/events/EventBus.js';
 import type { Logger } from '../common/logging/Logger.js';
 import { ValidationError } from '../common/errors/ValidationError.js';
-import { PermissionDeniedError } from '../common/errors/PermissionDeniedError.js';
 import { ConflictError } from '../common/errors/ConflictError.js';
 
 interface HarnessOptions {
@@ -174,16 +173,6 @@ test('warnUser rejects an empty reason', async () => {
 test('warnUser rejects warning yourself', async () => {
   const h = createHarness();
   await assert.rejects(() => h.service.warnUser('g1', 'mod1', 'reason', 'mod1'), ValidationError);
-});
-
-test('warnUser denies a non-moderator (override allowed=false)', async () => {
-  const h = createHarness({
-    permission: { ...allowOverride, allowed: false },
-  });
-  await assert.rejects(
-    () => h.service.warnUser('g1', 'u1', 'spam', 'mod1'),
-    PermissionDeniedError
-  );
 });
 
 test('warnUser auto-mutes after reaching the warning threshold', async () => {

@@ -9,4 +9,5 @@ export * from './ProfileRepository.js';
 export * from './TicketRepository.js';
 export * from './TransactionRepository.js';
 export * from './WalletRepository.js';
+export * from './RoleMappingRepository.js';
 export * from './WarningRepository.js';

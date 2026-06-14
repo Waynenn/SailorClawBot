@@ -5,52 +5,46 @@ import type { Container } from '../../container.js';
 import { handleCommandError } from '../../middleware/errorHandler.js';
 import { EMBED_COLORS } from '../../lib/embedColors.js';
 
-export const banCommand: Command = {
+export const kickCommand: Command = {
   data: new SlashCommandBuilder()
-    .setName('ban')
-    .setDescription('Ban a member from the server')
-    .addUserOption((o) => o.setName('user').setDescription('Member to ban').setRequired(true))
-    .addStringOption((o) => o.setName('reason').setDescription('Reason for ban').setRequired(true))
-    .addIntegerOption((o) =>
-      o.setName('duration').setDescription('Duration in days (omit for permanent)').setMinValue(1).setMaxValue(365)
-    ),
+    .setName('kick')
+    .setDescription('Kick a member from the server')
+    .addUserOption((o) => o.setName('user').setDescription('Member to kick').setRequired(true))
+    .addStringOption((o) => o.setName('reason').setDescription('Reason for kick').setRequired(true)),
 
   async execute(interaction: ChatInputCommandInteraction, container: Container): Promise<void> {
     await interaction.deferReply({ ephemeral: true });
 
     const target = interaction.options.getUser('user', true);
     const reason = interaction.options.getString('reason', true);
-    const duration = interaction.options.getInteger('duration') ?? undefined;
     const guildId = interaction.guildId!;
     const guild = interaction.guild!;
     const moderatorId = interaction.user.id;
     const selfMember = interaction.member as GuildMember;
 
-    const canBan = await container.permissionService.hasPermission(
-      guildId, moderatorId, 'can_ban',
+    const canKick = await container.permissionService.hasPermission(
+      guildId, moderatorId, 'can_kick',
       { discordRoleIds: selfMember.roles.cache.map((r) => r.id), isGuildOwner: guild.ownerId === moderatorId }
     );
-    if (!canBan) {
-      await interaction.editReply({ embeds: [new EmbedBuilder().setColor(EMBED_COLORS.punitive).setDescription('🚫 You lack permission to ban members.')] });
+    if (!canKick) {
+      await interaction.editReply({ embeds: [new EmbedBuilder().setColor(EMBED_COLORS.punitive).setDescription('🚫 You lack permission to kick members.')] });
       return;
     }
 
     try {
-      const ban = await container.moderationService.banUser(guildId, target.id, reason, moderatorId, duration);
+      const result = await container.moderationService.kickUser(guildId, target.id, reason, moderatorId);
 
-      await guild.members.ban(target.id, { reason: `[Case #${ban.caseNumber}] ${reason}` }).catch(() => null);
-
-      const expiry = ban.expiresAt instanceof Date
-        ? `until <t:${Math.floor(ban.expiresAt.getTime() / 1000)}:R>`
-        : 'permanently';
+      const targetMember = await guild.members.fetch(target.id).catch(() => null);
+      if (targetMember) {
+        await targetMember.kick(`[Case #${result.caseNumber}] ${reason}`).catch(() => null);
+      }
 
       const embed = new EmbedBuilder()
         .setColor(EMBED_COLORS.punitive)
-        .setTitle('🔨 Member Banned')
+        .setTitle('👢 Member Kicked')
         .addFields(
           { name: 'User', value: `${target.tag} (${target.id})`, inline: true },
-          { name: 'Duration', value: expiry, inline: true },
-          { name: 'Case', value: `#${ban.caseNumber}`, inline: true },
+          { name: 'Case', value: `#${result.caseNumber}`, inline: true },
           { name: 'Reason', value: reason }
         )
         .setTimestamp();
