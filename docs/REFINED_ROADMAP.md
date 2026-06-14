@@ -1,675 +1,352 @@
-# SailorClawBot: Refined Roadmap (16 weeks → Production)
+# SailorClawBot: Roadmap
 
-**Baseline:** June 13, 2026  
-**Target Launch:** Early September 2026 (200+ servers)
+**Baseline:** June 14, 2026  
+**Design spec:** `docs/superpowers/specs/2026-06-14-bot-design.md`
 
 ---
 
-## 🎯 Phase Breakdown
+## Status Overview
 
-### **PHASE 0: Foundation** ✅ COMPLETE
-**Duration:** Week 0 (June 1-13)  
-**Deliverables:**
-- [x] Monorepo structure (Turbo, pnpm)
-- [x] TypeScript configuration
-- [x] Prisma + PostgreSQL setup
-- [x] Docker infrastructure
-- [x] Basic contracts (DTOs, events)
-- [x] Validation pipeline (install → build → prisma)
+| Phase | Focus | Status |
+|-------|-------|--------|
+| 0 | Monorepo, Prisma, Docker | ✅ DONE |
+| 1 | Core services + repos (41 tests) | ✅ DONE |
+| 2 | Discord.js bot foundation (8 commands) | ✅ DONE (partial — no Discord API calls yet) |
+| 2.5 | Schema mega-migration + Discord API fixes + RoleMapping | 🔜 NEXT |
+| 3 | XP/Leveling vertical slice | ⏳ |
+| 4 | Economy extended (gambling, shop, inventory) | ⏳ |
+| 5 | Tickets full Discord integration | ⏳ |
+| 6 | Auto-moderation (6 rule types) | ⏳ |
+| 7 | Server management (logging, welcome, reaction roles, giveaways, starboard) | ⏳ |
+| 8 | Family/Clan | ⏳ |
+| 9 | Admin Dashboard (Next.js + OAuth2) | ⏳ |
+| 10 | User Dashboard (rank card, leaderboards) | ⏳ |
+| 11 | Achievements (20+ types) | ⏳ |
+| 12 | i18n EN+RU + rate limiting + polish | ⏳ |
+| 13 | Music stub (interface + placeholder) | ⏳ |
 
-**Completion Criteria:**
+---
+
+## PHASE 0 ✅ DONE
+
+- Monorepo (Turbo + pnpm workspaces)
+- TypeScript strict config
+- Prisma + PostgreSQL + Docker
+- Base contracts (DTOs, events, errors)
+- CI pipeline (GitHub Actions)
+
+---
+
+## PHASE 1 ✅ DONE
+
+**41 tests passing. 95%+ coverage on core services.**
+
+### Repos implemented
+`GuildRepositoryImpl`, `GuildMemberRepositoryImpl`, `ProfileRepositoryImpl`, `WalletRepositoryImpl`, `TransactionRepositoryImpl`, `WarningRepositoryImpl`, `MuteRepositoryImpl`, `BanRepositoryImpl`, `CaseRepositoryImpl`, `PermissionRepositoryImpl`, `TicketRepositoryImpl`, `FamilyRepositoryImpl`
+
+### Services implemented
+`GuildService`, `ProfileService`, `ModerationService`, `EconomyService`, `TicketService`, `FamilyService`, `PermissionService`
+
+---
+
+## PHASE 2 ✅ DONE (partial)
+
+**8 slash commands, DI container, event handlers.**
+
+### Commands
+`/warn`, `/mute`, `/unmute`, `/ban`, `/unban`, `/balance`, `/transfer`, `/profile`
+
+### Events
+`ready`, `guildCreate`, `guildDelete`, `interactionCreate`
+
+### Known gaps (fixed in Phase 2.5)
+- Ban/mute do NOT call Discord API yet (DB only)
+- No RoleMapping permission check
+- No GuildSettings service/repo
+- Missing schema models (GuildSettings, XP fields, etc.)
+
+---
+
+## PHASE 2.5 🔜 NEXT — Foundation Fixes
+
+**Completion criteria:**
 ```sh
-✅ pnpm install
-✅ pnpm build
-✅ pnpm prisma validate
-✅ pnpm prisma generate
+✅ pnpm build — no TS errors
+✅ /ban actually bans in Discord
+✅ /mute actually timeouts in Discord
+✅ Guild owner always has full permissions
+✅ pnpm test — all 41+ tests pass
 ```
 
-**Owner:** Architecture  
-**Status:** ✅ MERGED
+### 2.5.1 Prisma mega-migration
+Add all models from design spec Section 3:
+- `GuildSettings` (ticket config, welcome, XP config, starboard, logging, colors, economy config)
+- `RoleMapping` (Discord role → bot permission string)
+- `LevelRole`, `XpMultiplier`, `NoXpTarget`
+- `Item`, `InventoryItem`
+- `AutoModRule`
+- `ReactionRole`
+- `Giveaway`
+- `StarboardEntry`
+- `Achievement`, `UserAchievement`
+
+Add fields to existing models:
+- `Profile`: `xp Int @default(0)`, `level Int @default(0)`, `totalXp Int @default(0)`
+- `Ticket`: `channelId String?`, `claimedById String?`, `claimedAt DateTime?`, `closedById String?`, `rating Int?`, `subject String?`
+
+### 2.5.2 Fix Discord API calls
+- `/ban` → `guild.members.ban(userId, { reason })`
+- `/mute` → `member.timeout(durationMs, reason)` (max 28 days Discord limit)
+- `/unban` → `guild.members.unban(userId)`
+- `/unmute` → `member.timeout(null)`
+
+### 2.5.3 RoleMapping permission system
+- `GuildSettingsRepositoryImpl` + `GuildSettingsService` (getSettings, updateSettings)
+- Update `PermissionService.hasPermission()`: check guild owner → RoleMapping → PermissionOverride
+- Per-action permission strings: `can_warn`, `can_mute`, `can_ban`, `can_manage_tickets`, `can_manage_guild`
+- Add to container: `guildSettingsRepo`, `guildSettingsService`
+
+### 2.5.4 Update bot intents
+Add `GatewayIntentBits.MessageContent` (required for auto-mod, XP, tickets).
 
 ---
 
-### **PHASE 1: Core Architecture** 🔄 CURRENT
-**Duration:** Weeks 1-2 (June 13-27)  
-**Sprint:** 2 weeks
+## PHASE 3 — XP / Leveling
 
-**Deliverables:**
+**Vertical slice: schema (done in 2.5) → service → commands → Dashboard page.**
 
-#### 1.1 Prisma Schema Expansion
-- [ ] Add Moderation models (Warning, Mute, Ban, Case)
-- [ ] Add Economy models (Transaction, DailyStreak, RoleReward)
-- [ ] Add Ticket models (Ticket, TicketAssignment)
-- [ ] Add Guild Configuration models (GuildSettings, RoleMapping)
-- [ ] Add Logging models (AuditLog, ErrorLog, RateLimitLog)
-- [ ] Create comprehensive indexes for production queries
-- [ ] Add composite unique constraints
+### XpService (packages/core)
+- `grantXp(guildId, userId, amount)` → returns `{ leveled: boolean, newLevel: number }`
+- `getLeaderboard(guildId, page, limit)` → sorted by `totalXp DESC`
+- `setXp(guildId, userId, amount)` — admin
+- Level formula: `XP_needed(n) = 5n² + 50n + 100`
 
-**Files:**
-- `packages/database/prisma/schema.prisma` (EXPAND)
-- `packages/database/prisma/migrations/001_initial_schema.sql`
+### Bot integration
+- `messageCreate` handler: check cooldown (in-memory Map), check NoXpTarget, apply XpMultiplier, call `xpService.grantXp()`
+- On level-up: assign LevelRole if configured, send embed notification (channel or DM per GuildSettings)
+- Level-up embed: color `0x3498db`, show new level + XP needed for next
 
-#### 1.2 Repository Implementations
-- [ ] `GuildRepositoryImpl` — Guild CRUD + settings
-- [ ] `ProfileRepositoryImpl` — User profiles per guild
-- [ ] `WalletRepositoryImpl` — Balance operations + transaction history
-- [ ] `ModerationRepositoryImpl` — Warnings, mutes, bans, cases
-- [ ] `TicketRepositoryImpl` — Ticket lifecycle
-- [ ] `GuildSettingsRepositoryImpl` — Configuration storage
-- [ ] `AuditLogRepositoryImpl` — Action logging
+### Commands
+- `/rank [@user]` — embed with avatar, level, XP bar (text-based), rank position
+- `/leaderboard [page]` — top 10 per page, paginated with Prev/Next buttons
+- `/xp give @user <amount>` (admin)
+- `/xp set @user <amount>` (admin)
 
-**Files:**
-```
-packages/database/src/repositories/
-├── GuildRepositoryImpl.ts
-├── ProfileRepositoryImpl.ts
-├── WalletRepositoryImpl.ts
-├── ModerationRepositoryImpl.ts
-├── TicketRepositoryImpl.ts
-├── GuildSettingsRepositoryImpl.ts
-└── AuditLogRepositoryImpl.ts
-```
+### Dashboard page
+- `/dashboard/[guildId]/leveling`: enable/disable XP, xpMin/xpMax/cooldown sliders, level-up message template, level-up channel selector, LevelRole table (add/remove), XpMultiplier table, NoXpTarget list
 
-#### 1.3 Core Service Interfaces
-- [ ] `ModerationService` — Warn, mute, ban, case management
-- [ ] `EconomyService` — Wallet operations, transactions, leaderboards
-- [ ] `TicketService` — Ticket lifecycle management
-- [ ] `GuildConfigService` — Settings persistence + retrieval
-- [ ] `PermissionService` — RBAC validation
-- [ ] `AuditService` — Action logging
-
-**Files:**
-```
-packages/core/src/services/
-├── ModerationService.ts
-├── EconomyService.ts
-├── TicketService.ts
-├── GuildConfigService.ts
-├── PermissionService.ts
-└── AuditService.ts
-```
-
-#### 1.4 Domain Event Expansion
-- [ ] Expand `EventNames` with all domain events
-- [ ] Define event payloads (TypeScript interfaces)
-- [ ] Event publishing strategy (EventBus)
-
-**Files:**
-- `packages/contracts/src/events/EventNames.ts` (EXPAND)
-- `packages/contracts/src/events/EventPayloads.ts` (NEW)
-
-#### 1.5 Error Handling & Validation
-- [ ] Domain-specific errors (ValidationError, PermissionDeniedError, etc.)
-- [ ] Zod schemas for all DTOs
-- [ ] Input validation in services
-
-**Files:**
-- `packages/core/src/domain/errors/` (NEW)
-- `packages/contracts/src/validation/schemas.ts` (NEW)
-
-**Testing:**
-- [ ] Unit tests for repositories (mocked DB)
-- [ ] Unit tests for services (mocked repositories)
-- [ ] Integration tests (with test DB)
-
-**Completion Criteria:**
+**Completion criteria:**
 ```sh
-✅ pnpm build — no TypeScript errors
-✅ pnpm test — 80%+ coverage on core services
-✅ pnpm prisma generate — types generated
-✅ All repositories implement their interfaces
-✅ No cyclic dependencies
+✅ XP granted on message, cooldown respected
+✅ Level-up triggers role assignment
+✅ /rank shows correct data
+✅ /leaderboard paginates correctly
+✅ XpService tests 80%+ coverage
 ```
-
-**Owner:** Backend Lead  
-**Status:** 🔄 IN PROGRESS (Start immediately)
 
 ---
 
-### **PHASE 2: Discord Bot Integration** ⏳ NEXT
-**Duration:** Weeks 3-5 (June 27 — July 18)  
-**Sprint:** 3 weeks
+## PHASE 4 — Economy Extended
 
-**Deliverables:**
+### EconomyService extensions (packages/core)
+- `claimDaily(guildId, userId)` → amount from GuildSettings, 24h cooldown
+- `work(guildId, userId)` → random amount, 1h cooldown
+- `crime(guildId, userId)` → higher reward, 25% chance fine, 2h cooldown
+- `rob(guildId, userId, targetId)` → steal 10-30% target balance, 30% backfire, 4h cooldown
+- `coinflip(guildId, userId, choice, amount)` → 50/50
+- `slots(guildId, userId, amount)` → 3-reel, 5 symbols
+- `blackjack(guildId, userId, amount)` → deal cards, stand/hit/double buttons
+- `roulette(guildId, userId, bet, amount)` → red/black/number
 
-#### 2.1 Bot Scaffolding
-- [ ] Discord.js client setup
-- [ ] Intents configuration (GUILDS, GUILD_MEMBERS, MESSAGE_CONTENT)
-- [ ] Event listener infrastructure
-- [ ] Command handler framework
-- [ ] Middleware pipeline (auth, rate-limit, permissions, logging)
+### ShopService / InventoryService (packages/core)
+- `ShopService`: `listItems(guildId)`, `buyItem(guildId, userId, itemId)`, `createItem(guildId, data)`, `deleteItem(guildId, itemId)`
+- `InventoryService`: `listInventory(guildId, userId)`, `useItem(guildId, userId, itemId)`
 
-**Files:**
+### Commands
+`/daily`, `/work`, `/crime`, `/rob @user`, `/coinflip heads|tails <amount>`, `/slots <amount>`, `/blackjack <amount>` (with Hit/Stand/Double buttons), `/roulette <bet> <amount>`, `/shop [page]`, `/buy <item>`, `/sell <item>`, `/inventory`
+
+### Dashboard page
+`/dashboard/[guildId]/economy`: currency name/emoji, dailyAmount, startingBalance, shop item management table (add/edit/delete)
+
+---
+
+## PHASE 5 — Tickets (Full Discord Integration)
+
+### Bot events
+`messageCreate` in ticket channel:
+1. Delete user message
+2. Create channel `ticket-{username}-{ticketNumber}` in `ticketCategoryId`
+3. Set permissions: only user + staff roles see channel
+4. Post claim embed (blue border, user info, subject, Claim button, Close button)
+5. Call `ticketService.openTicket()` → save `channelId`, `subject`
+6. Edit stats embed in `ticketStatsMessageId`
+
+Button interactions:
+- **Claim** → edit embed (show claimer), update DB `claimedById`, update stats
+- **Close** → prompt rating (5 buttons 1-5 ⭐), close ticket in DB, update stats, optionally delete/archive channel after 24h (worker job)
+- **Rate 1-5** → save `Ticket.rating`
+
+### Commands
+- `/ticket setup` — creates stats embed in current channel, saves to GuildSettings
+- `/ticket close [reason]` — closes ticket if run inside ticket channel
+- `/ticket add @user` — adds user to ticket channel permissions
+- `/ticket remove @user` — removes user from ticket channel permissions
+
+### Stats embed format
 ```
-apps/bot/src/
-├── Bot.ts — Main client class
-├── handlers/
-│  ├── CommandHandler.ts
-│  ├── EventHandler.ts
-│  └── InteractionHandler.ts
-├── middleware/
-│  ├── AuthMiddleware.ts
-│  ├── RateLimitMiddleware.ts
-│  ├── PermissionMiddleware.ts
-│  └── LoggingMiddleware.ts
-└── utils/
-   └── ErrorHandling.ts
-```
-
-#### 2.2 Guild Lifecycle
-- [ ] `guildCreate` event → Register guild + create settings
-- [ ] `guildDelete` event → Archive guild data
-- [ ] `guildUpdate` event → Sync guild name/icon
-- [ ] Slash command registration per guild
-
-**Files:**
-- `apps/bot/src/events/GuildEvents.ts`
-
-#### 2.3 Core Commands (20 total)
-
-**Moderation (5 commands):**
-- [ ] `/warn @user <reason>` → ModerationService.warnUser()
-- [ ] `/mute @user <duration>` → ModerationService.muteUser()
-- [ ] `/unmute @user` → ModerationService.unmuteUser()
-- [ ] `/ban @user <reason>` → ModerationService.banUser()
-- [ ] `/cases [user]` → View moderation history
-
-**Economy (5 commands):**
-- [ ] `/balance` → Show wallet balance
-- [ ] `/pay @user <amount>` → Transfer currency
-- [ ] `/leaderboard` → Top 10 users (cached)
-- [ ] `/daily` → Claim daily reward
-- [ ] `/shop` → Browse purchasable roles
-
-**Tickets (3 commands):**
-- [ ] `/ticket create <subject>` → Open support ticket
-- [ ] `/ticket close` → Close ticket + archive
-- [ ] `/tickets` → List my tickets
-
-**Fun (5 commands):**
-- [ ] `/8ball <question>` → Magic 8 ball
-- [ ] `/coin` → Flip coin
-- [ ] `/roll <sides>` → Roll dice
-- [ ] `/rps <choice>` → Rock-paper-scissors
-- [ ] `/meme` → Random meme
-
-**Admin (2 commands):**
-- [ ] `/config` → Guild settings (owner only)
-- [ ] `/stats` → Guild statistics
-
-**Files:**
-```
-apps/bot/src/commands/
-├── moderation/
-│  ├── warn.ts
-│  ├── mute.ts
-│  ├── unmute.ts
-│  ├── ban.ts
-│  └── cases.ts
-├── economy/
-│  ├── balance.ts
-│  ├── pay.ts
-│  ├── leaderboard.ts
-│  ├── daily.ts
-│  └── shop.ts
-├── tickets/
-│  ├── create.ts
-│  ├── close.ts
-│  └── list.ts
-└── fun/
-   ├── 8ball.ts
-   ├── coin.ts
-   ├── roll.ts
-   ├── rps.ts
-   └── meme.ts
+🎫 Support Tickets
+📨 Total: 42
+⏳ Pending: 3
+🔍 In Progress: 2
+✅ Closed: 37
 ```
 
-#### 2.4 Error Handling & Logging
-- [ ] Try-catch wrappers for all commands
-- [ ] User-friendly error messages
-- [ ] Admin error logs to private channel
-- [ ] Structured logging (Winston)
+### Dashboard page
+`/dashboard/[guildId]/tickets`: category selector, stats channel selector, log channel selector, active tickets list with claim/close actions
 
-**Testing:**
-- [ ] Integration tests with mocked Discord client
-- [ ] Command parsing tests
-- [ ] Permission validation tests
-- [ ] Rate limit tests
+---
 
-**Completion Criteria:**
+## PHASE 6 — Auto-Moderation
+
+### AutoModService (packages/core)
+`checkMessage(message, rules, guildSettings)` → `AutoModResult | null`
+
+### Rules
+| Type | Config | Trigger | Default action |
+|------|--------|---------|----------------|
+| `spam` | threshold (msgs/5s window) | Rate > threshold | mute 5min |
+| `links` | whitelist: string[] | Non-whitelisted URLs | delete |
+| `caps` | threshold: 0-100% | % caps > threshold | delete |
+| `invites` | whitelist: guildId[] | discord.gg links | delete + warn |
+| `mentions` | max: number | @mention count > max | mute 10min |
+| `words` | patterns: string[] | Word/regex match | delete + warn |
+
+### Bot integration
+`messageCreate` → `autoModService.checkMessage()` → execute action → log to mod-log channel
+
+### Dashboard page
+`/dashboard/[guildId]/automod`: per-rule card (enable toggle, threshold input, whitelist, action selector, duration input)
+
+---
+
+## PHASE 7 — Server Management
+
+### Logging
+- `LogService.log(guildId, event, data)` → format embed → send to `logChannelId`
+- Events: `ban`, `unban`, `mute`, `unmute`, `warn`, `kick`, `join`, `leave`, `messageEdit`, `messageDelete`, `channelCreate`, `channelDelete`
+- Each event toggleable in Dashboard per-channel
+- Log embed: timestamp, actor, target, reason, case ID (if applicable)
+
+### Welcome / Leave
+- `guildMemberAdd` event → fetch GuildSettings → render embed template → send to welcomeChannelId or user DM
+- `guildMemberRemove` event → same for leaveMessage
+- Template variables: `{username}`, `{mention}`, `{server}`, `{memberCount}`, `{date}`
+
+### Reaction Roles
+- `messageReactionAdd` → lookup `ReactionRole` by `guildId + messageId + emoji` → add Discord role
+- `messageReactionRemove` → remove Discord role
+- `/reactionrole add <message_link> <emoji> @role`
+- `/reactionrole remove <message_link> <emoji>`
+- Dashboard: visual panel builder
+
+### Giveaways
+- `/giveaway create prize:"..." duration:"1h" winners:1` → post embed, save to DB
+- `messageReactionAdd` on 🎉 → add userId to `Giveaway.participants`, edit embed with count
+- Worker job at `endsAt` → pick winners, update embed, ping winners in channel
+- `/giveaway end <id>`, `/giveaway reroll <id>`
+
+### Starboard (disabled by default)
+- `messageReactionAdd` with ⭐ → count total ⭐ on message
+- If ≥ threshold AND no StarboardEntry → post to `starboardChannelId`, save entry
+- If count changes → edit starboard message
+- If drops below threshold → delete starboard message, remove entry
+
+---
+
+## PHASE 8 — Family / Clan
+
+**No family bank, no quests, no bonuses. Social only.**
+
+### FamilyService extensions
+- `getFamilyLeaderboard(guildId)` → join Profile, sum `totalXp`, group by family
+- `inviteMember(guildId, familyId, userId, inviterId)`
+- `kickMember(guildId, familyId, userId, kickerId)` — leader only
+
+### Commands
+`/family create <name>`, `/family info [name]`, `/family join <name>`, `/family leave`, `/family invite @user`, `/family kick @user`, `/family top`
+
+Family top embed: top 10 families by total member XP, color `0x9b59b6`.
+
+---
+
+## PHASE 9 — Admin Dashboard (Next.js)
+
+**Tech:** Next.js 14 App Router, Tailwind CSS, Discord OAuth2, REST API from bot/core.
+
+- OAuth2 login → store session → check user is guild admin/owner
+- Guild selector (shows all mutual guilds where user has MANAGE_GUILD)
+- Settings pages per domain (see design spec Section 5)
+- All changes call API → update GuildSettings in DB
+
+---
+
+## PHASE 10 — User Dashboard
+
+Public profile pages:
+- `/u/[guildId]/[userId]` — rank card (level, XP bar, rank#, balance, achievements)
+- `/dashboard/[guildId]/leaderboard` — XP top, paginated, weekly/all-time toggle
+- `/dashboard/[guildId]/economy/top` — balance leaderboard
+
+No admin required to view. Discord OAuth2 only for "my profile" features.
+
+---
+
+## PHASE 11 — Achievements
+
+- `AchievementService.check(guildId, userId, trigger)` — called from XpService, EconomyService, TicketService
+- 20+ predefined achievements (see design spec Section 4.8)
+- On unlock: send DM embed + log to server
+- `/achievements [@user]` — embed grid of earned achievements
+- User Dashboard: achievements showcase section
+
+---
+
+## PHASE 12 — i18n + Rate Limiting + Polish
+
+### i18n
+- `apps/bot/src/i18n/en.json` + `ru.json`
+- `t(key, locale, vars?)` helper — no external lib
+- Locale from `interaction.guildLocale` → fallback to `GuildSettings.locale` → fallback `en`
+
+### Rate limiting
+- Moderation commands: no user cooldown (staff)
+- Gambling: 5s in-memory per user
+- General commands: 3s in-memory per user
+- Daily/work/crime/rob: persisted cooldowns in DB
+
+### Polish
+- Error embed improvements
+- Loading states (deferReply everywhere)
+- Consistent footer text across all embeds
+- Slash command descriptions in RU + EN
+
+---
+
+## PHASE 13 — Music Stub
+
+- `packages/contracts/src/services/IMusicService.ts` — interface only
+- `@discordjs/voice` added to `apps/bot/package.json`
+- `/music` command → embed "🎵 Music coming soon"
+- No implementation. Full music requires separate infrastructure + streaming source decision.
+
+---
+
+## Completion Criteria (per phase)
+
+Each phase must pass before starting next:
 ```sh
-✅ pnpm build
-✅ Bot can login to Discord
-✅ 20 commands registered and functional
-✅ Rate limiting works (max 5 commands/10s per user)
-✅ Errors logged, no crashes
-✅ Response time < 500ms for all commands
+pnpm build          # zero TS errors
+pnpm test           # all tests pass, 80%+ coverage on new code
+pnpm prisma validate
+# Manual: test commands in dev Discord server
 ```
-
-**Owner:** Bot Lead  
-**Status:** ⏳ Starts Week 3
-
----
-
-### **PHASE 3: Worker Queues & Async Jobs** ⏳ NEXT
-**Duration:** Weeks 6-7 (July 18 — August 1)  
-**Sprint:** 2 weeks
-
-**Deliverables:**
-
-#### 3.1 Bull Queue Setup
-- [ ] Queue initialization (Redis backend)
-- [ ] Job processor architecture
-- [ ] Retry logic (exponential backoff)
-- [ ] Dead Letter Queue (DLQ) handling
-- [ ] Circuit breaker for DB failures
-
-**Files:**
-```
-packages/worker/src/
-├── queues/
-│  ├── QueueFactory.ts
-│  ├── ModerationQueue.ts
-│  ├── EconomyQueue.ts
-│  └── TicketQueue.ts
-├── processors/
-│  ├── ModerationProcessor.ts
-│  ├── EconomyProcessor.ts
-│  └─ TicketProcessor.ts
-└── dlq/
-   └── DeadLetterHandler.ts
-```
-
-#### 3.2 Async Jobs
-- [ ] `ProcessMuteExpiry` — Check every 1 minute, unmute expired users
-- [ ] `ProcessBanExpiry` — Check every 1 minute, unban expired bans
-- [ ] `UpdateLeaderboard` — Refresh cache every 5 minutes
-- [ ] `SendTicketReminder` — Notify unassigned tickets every 30 min
-- [ ] `ProcessPayday` — Daily currency payout (scheduled)
-- [ ] `CleanupExpiredData` — Archive old logs (weekly)
-
-**Files:**
-- `packages/worker/src/jobs/` — One file per job
-
-#### 3.3 Scheduled Jobs
-- [ ] Cron configuration (node-cron)
-- [ ] Job state persistence
-- [ ] Timezone support per guild
-
-**Testing:**
-- [ ] Job processor unit tests
-- [ ] Retry logic tests
-- [ ] DLQ tests
-
-**Completion Criteria:**
-```sh
-✅ Queue processes 1000 jobs/minute
-✅ Retry policy: 4 attempts over 3 minutes
-✅ DLQ captures failed jobs (manual review)
-✅ No data loss on queue shutdown
-✅ Monitoring: job success rate > 99%
-```
-
-**Owner:** Infrastructure Lead  
-**Status:** ⏳ Starts Week 6
-
----
-
-### **PHASE 4: Caching & Performance** ⏳ NEXT
-**Duration:** Week 8 (August 1-8)  
-**Sprint:** 1 week
-
-**Deliverables:**
-
-#### 4.1 Redis Integration
-- [ ] Redis client setup (ioredis)
-- [ ] Cache layer abstraction
-- [ ] TTL policies per data type
-- [ ] Cache invalidation strategy
-
-**Files:**
-```
-packages/database/src/cache/
-├── CacheClient.ts
-├─ policies/
-│  ├─ LeaderboardPolicy.ts
-│  ├─ GuildConfigPolicy.ts
-│  └─ PermissionPolicy.ts
-└─ invalidation/
-   └─ CacheInvalidator.ts
-```
-
-#### 4.2 Cached Operations
-- [ ] Leaderboard queries (5min TTL)
-- [ ] Guild configuration (1hr TTL)
-- [ ] Permission lookups (30min TTL)
-- [ ] User profiles (15min TTL)
-
-#### 4.3 Performance Optimization
-- [ ] Database query optimization (indexes, selective fields)
-- [ ] N+1 query detection & fixes
-- [ ] Batch operations (upsertMany, etc.)
-- [ ] Connection pooling (Prisma)
-
-**Testing:**
-- [ ] Load test: 1000 concurrent users
-- [ ] Cache hit rate > 85%
-- [ ] Query latency: p99 < 100ms
-
-**Completion Criteria:**
-```sh
-✅ Leaderboard query: < 50ms (cached)
-✅ Fresh leaderboard: < 500ms (DB query)
-✅ Command latency: p95 < 200ms
-✅ Cache memory usage: < 2GB for 5K guilds
-```
-
-**Owner:** Performance Lead  
-**Status:** ⏳ Starts Week 8
-
----
-
-### **PHASE 5: Testing & Quality** ⏳ NEXT
-**Duration:** Weeks 9-10 (August 8-22)  
-**Sprint:** 2 weeks
-
-**Deliverables:**
-
-#### 5.1 Test Suite
-- [ ] Unit tests: 80%+ coverage for core services
-- [ ] Integration tests: All repository operations
-- [ ] E2E tests: Command flows with test Discord server
-- [ ] Load testing: k6 scripts for production simulation
-
-**Files:**
-```
-*/tests/ (per package)
-├── __tests__/
-│  ├── unit/ — Service logic tests
-│  ├── integration/ — Repository tests with test DB
-│  └── e2e/ — Full command flows
-└── fixtures/ — Test data
-```
-
-#### 5.2 Security Audit
-- [ ] Input validation tests
-- [ ] Permission boundary tests
-- [ ] SQL injection protection (Prisma auto)
-- [ ] Rate limiting tests
-- [ ] Audit log completeness
-
-#### 5.3 Documentation
-- [ ] API documentation (OpenAPI)
-- [ ] Architecture diagrams
-- [ ] Deployment guide
-- [ ] Troubleshooting runbook
-
-**Completion Criteria:**
-```sh
-✅ Core services: 80%+ test coverage
-✅ No security vulnerabilities (OWASP top 10)
-✅ Load test: 5000 guilds, 100K users, < 500ms p99
-✅ All commands tested in real Discord server
-```
-
-**Owner:** QA Lead  
-**Status:** ⏳ Starts Week 9
-
----
-
-### **PHASE 6: Observability & Monitoring** ⏳ NEXT
-**Duration:** Week 11 (August 22-29)  
-**Sprint:** 1 week
-
-**Deliverables:**
-
-#### 6.1 Logging
-- [ ] Winston setup (JSON structured logs)
-- [ ] Log aggregation (ELK or Datadog)
-- [ ] Log levels per service
-- [ ] Error tracking (Sentry integration)
-
-#### 6.2 Metrics
-- [ ] Prometheus client setup
-- [ ] Key metrics:
-  - Request rate (per second)
-  - Latency (p50, p95, p99)
-  - Error rate (per service)
-  - Queue depth (jobs pending)
-  - Cache hit rate
-  - Database connection pool stats
-
-#### 6.3 Dashboards
-- [ ] Grafana dashboards (3 total)
-  - Operations: latency, errors, uptime
-  - Business: guilds, users, transactions
-  - Infrastructure: CPU, memory, connections
-
-#### 6.4 Alerting
-- [ ] Alert rules:
-  - Error rate > 1%
-  - Latency p95 > 500ms
-  - Queue depth > 10000
-  - Uptime < 99.5%
-- [ ] Alert channels: Slack, PagerDuty
-
-**Completion Criteria:**
-```sh
-✅ All services emit structured logs
-✅ Prometheus scraping all metrics
-✅ Grafana dashboards operational
-✅ Alerts firing and routable
-```
-
-**Owner:** DevOps Lead  
-**Status:** ⏳ Starts Week 11
-
----
-
-### **PHASE 7: Dashboard & Admin UI** ⏳ NEXT
-**Duration:** Weeks 12-13 (August 29 — September 12)  
-**Sprint:** 2 weeks
-
-**Deliverables:**
-
-#### 7.1 Backend API
-- [ ] REST API (Express or Fastify)
-- [ ] Authentication (Discord OAuth2)
-- [ ] RBAC for admin operations
-- [ ] Rate limiting (API-level)
-- [ ] OpenAPI 3.0 spec
-
-#### 7.2 Frontend (React)
-- [ ] Guild overview dashboard
-- [ ] Moderation case management
-- [ ] Leaderboard viewer
-- [ ] Settings editor (guild config)
-- [ ] Real-time notifications (WebSocket)
-
-#### 7.3 Admin Functions
-- [ ] View all guilds + stats
-- [ ] Manual case review
-- [ ] Currency adjustments (audit trail)
-- [ ] Emergency commands (disable bot, etc.)
-
-**Files:**
-```
-apps/dashboard/
-├── backend/ (if API separate)
-│  └── api/
-│     ├── guilds/
-│     ├── moderation/
-│     ├── economy/
-│     └── auth/
-└── frontend/ (if included)
-   └── pages/
-      ├── /dashboard
-      ├─ /moderation
-      ├─ /economy
-      └─ /settings
-```
-
-**Completion Criteria:**
-```sh
-✅ Dashboard loads in < 2s
-✅ Admin can view all guilds + stats
-✅ Guild owner can edit settings
-✅ Case management functional
-```
-
-**Owner:** Frontend Lead  
-**Status:** ⏳ Starts Week 12
-
----
-
-### **PHASE 8: Production Hardening** ⏳ NEXT
-**Duration:** Weeks 14-15 (September 12-26)  
-**Sprint:** 2 weeks
-
-**Deliverables:**
-
-#### 8.1 Deployment
-- [ ] Docker image optimization
-- [ ] Kubernetes manifests (if scaling)
-- [ ] Database migration strategy (rolling updates)
-- [ ] Rollback procedures
-- [ ] Secrets management (env vars)
-
-#### 8.2 High Availability
-- [ ] Database replication (primary + replica)
-- [ ] Redis cluster (if needed)
-- [ ] Load balancing (for multiple bot instances)
-- [ ] Graceful shutdown handlers
-
-#### 8.3 Disaster Recovery
-- [ ] Database backups (automated, daily)
-- [ ] Backup validation (test restore)
-- [ ] RTO: 15 minutes
-- [ ] RPO: 1 hour
-
-#### 8.4 Security Hardening
-- [ ] HTTPS for all APIs
-- [ ] WAF rules (DDoS protection)
-- [ ] Rate limiting at proxy level
-- [ ] Secrets rotation
-- [ ] Security headers (CORS, CSP, etc.)
-
-**Completion Criteria:**
-```sh
-✅ Deploy to production with zero downtime
-✅ Database backed up daily
-✅ RTO/RPO targets met
-✅ All security checks passed
-✅ Uptime monitoring active
-```
-
-**Owner:** DevOps Lead  
-**Status:** ⏳ Starts Week 14
-
----
-
-### **PHASE 9: Launch Prep & Validation** ⏳ FINAL
-**Duration:** Week 16 (September 26 — October 3)  
-**Sprint:** 1 week
-
-**Deliverables:**
-
-#### 9.1 Pre-Launch Checklist
-```
-✅ All systems operational (bot, worker, dashboard)
-✅ Monitoring active (metrics, logs, alerts)
-✅ Backups tested (restore validation)
-✅ Performance targets met (load testing passed)
-✅ Security audit completed (no critical vulnerabilities)
-✅ Team trained (runbooks, incident procedures)
-✅ User documentation ready
-```
-
-#### 9.2 Soft Launch
-- [ ] Internal guild (team + testers)
-- [ ] Monitor for 24 hours
-- [ ] Fix critical issues
-- [ ] Gather feedback
-
-#### 9.3 Public Launch
-- [ ] Bot token activated
-- [ ] Public Discord server
-- [ ] Marketing prep
-- [ ] Support channel setup
-
-**Completion Criteria:**
-```sh
-✅ Bot live and accessible
-✅ 200+ servers onboarded (first week)
-✅ Uptime > 99.5%
-✅ Error rate < 0.1%
-✅ User feedback positive
-```
-
-**Owner:** Product Lead  
-**Status:** ⏳ Starts Week 16
-
----
-
-## 📊 Timeline Summary
-
-```
-Phase 0: ■■■■■ DONE         (Week 0)
-Phase 1: ■■■■  IN PROGRESS  (Weeks 1-2)
-Phase 2: ■■■■■ READY        (Weeks 3-5)
-Phase 3: ■■■■  READY        (Weeks 6-7)
-Phase 4: ■■    READY        (Week 8)
-Phase 5: ■■■■  READY        (Weeks 9-10)
-Phase 6: ■■    READY        (Week 11)
-Phase 7: ■■■■  READY        (Weeks 12-13)
-Phase 8: ■■■■  READY        (Weeks 14-15)
-Phase 9: ■■    READY        (Week 16)
-
-Total: 16 weeks to production
-Deadline: September 26, 2026
-Launch: October 3, 2026
-```
-
----
-
-## 🎖️ Success Metrics
-
-### By Week 8 (Early August)
-- ✅ Bot fully functional with 20 commands
-- ✅ 50+ servers testing
-- ✅ Performance targets met
-
-### By Week 12 (Mid-September)
-- ✅ Dashboard MVP live
-- ✅ Monitoring + alerting active
-- ✅ 200+ servers onboarded
-
-### By Week 16 (Early October)
-- ✅ Public launch
-- ✅ 500+ servers
-- ✅ 99.5%+ uptime
-- ✅ < 0.1% error rate
-
----
-
-## 🚀 Next Immediate Actions
-
-1. **Today (June 13):** Kick off Phase 1
-   - [ ] Expand Prisma schema
-   - [ ] Start repository implementations
-   - [ ] Create service interfaces
-
-2. **By June 20:**
-   - [ ] All repositories implemented
-   - [ ] All core services working
-   - [ ] 80%+ test coverage
-
-3. **By June 27:**
-   - [ ] Phase 1 complete
-   - [ ] Phase 2 kickoff (bot integration)
-
----
-
-**Owner:** Principal Architect  
-**Last Updated:** June 13, 2026  
-**Next Review:** June 20, 2026
