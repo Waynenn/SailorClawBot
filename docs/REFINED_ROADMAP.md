@@ -12,7 +12,7 @@
 | 0 | Monorepo, Prisma, Docker | ✅ DONE |
 | 1 | Core services + repos (41 tests) | ✅ DONE |
 | 2 | Discord.js bot foundation (8 commands) | ✅ DONE (partial — no Discord API calls yet) |
-| 2.5 | Schema mega-migration + Discord API fixes + RoleMapping | 🔜 NEXT |
+| 2.5 | Schema mega-migration + Discord API fixes + RoleMapping + Worker infra + /kick /cases | 🔜 NEXT |
 | 3 | XP/Leveling vertical slice | ⏳ |
 | 4 | Economy extended (gambling, shop, inventory) | ⏳ |
 | 5 | Tickets full Discord integration | ⏳ |
@@ -106,8 +106,20 @@ Add fields to existing models:
 - Per-action permission strings: `can_warn`, `can_mute`, `can_ban`, `can_manage_tickets`, `can_manage_guild`
 - Add to container: `guildSettingsRepo`, `guildSettingsService`
 
-### 2.5.4 Update bot intents
-Add `GatewayIntentBits.MessageContent` (required for auto-mod, XP, tickets).
+### 2.5.4 Add missing commands
+- `/kick @user [reason]` → `member.kick(reason)` — was missing from Phase 2
+- `/cases [@user]` → paginated embed of moderation cases from CaseRepository
+
+### 2.5.5 Update bot intents
+Add `GatewayIntentBits.MessageContent` (privileged — must be enabled in Discord Developer Portal).
+`GUILD_MEMBERS` already in intents — verify it's enabled in portal too.
+
+### 2.5.6 Worker infrastructure (apps/worker)
+Basic worker setup needed before Phase 3 (XP cooldowns, mute/ban expiry):
+- `apps/worker/src/jobs/ProcessMuteExpiry.ts` — cron every 1 min: find expired Mute records → `member.timeout(null)` via Discord REST
+- `apps/worker/src/jobs/ProcessBanExpiry.ts` — cron every 1 min: find expired Ban records → `guild.members.unban()`
+- Worker needs its own Discord REST client (not full gateway, just REST)
+- Job runner: `node-cron` (no Redis/Bull needed at this stage — add Redis in Phase 4 if scale requires)
 
 ---
 

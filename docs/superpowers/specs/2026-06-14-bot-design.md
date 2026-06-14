@@ -100,6 +100,9 @@ model GuildSettings {
   startingBalance      Int     @default(0)
 }
 
+// NOTE: Guild model needs back-relation added:
+// settings GuildSettings?
+
 model RoleMapping {
   id         String @id @default(cuid())
   guildId    String
@@ -237,16 +240,31 @@ rating      Int?     // 1-5
 subject     String?
 ```
 
+### Wallet model additions (economy cooldowns)
+```prisma
+// Add to existing Wallet:
+lastDailyAt  DateTime?
+lastWorkAt   DateTime?
+lastCrimeAt  DateTime?
+lastRobAt    DateTime?
+```
+
 ---
 
 ## 4. Feature Domains
 
 ### 4.1 Moderation (Phase 2.5 fix)
-Existing 5 commands — add real Discord API calls:
+Existing commands — add real Discord API calls:
 - `/ban` → `guild.members.ban(userId, { reason })`
-- `/mute` → `member.timeout(durationMs, reason)`
+- `/mute` → `member.timeout(durationMs, reason)` (Discord max: 2419200000ms = 28 days)
 - `/unban` → `guild.members.unban(userId)`
 - `/unmute` → `member.timeout(null)`
+- `/kick` → `member.kick(reason)` **[NEW — was missing from Phase 2]**
+- `/cases [@user]` → list moderation history **[NEW — was missing from Phase 2]**
+
+**Discord privileged intents required (enable in Developer Portal):**
+- `GUILD_MEMBERS` — needed for member fetching, join/leave events
+- `MESSAGE_CONTENT` — needed for XP, auto-mod, ticket messageCreate handler
 
 Permission check order:
 1. Guild owner → always allowed
@@ -295,6 +313,10 @@ Permission check order:
 4. Staff/admin clicks **Close** → ticket status = closed, prompt user for 1-5 star rating via buttons
 5. User rates → `Ticket.rating` saved, log to `ticketLogChannelId`
 
+**Ticket channel permissions:** on channel create, grant VIEW_CHANNEL + SEND_MESSAGES to: ticket author, roles with `can_manage_tickets` in `RoleMapping`, bot itself. Deny VIEW_CHANNEL to `@everyone`.
+
+**Stats embed rate limiting:** debounce edits — flush max once per 2 seconds. Prevents Discord 5-edits/5s limit during burst opens.
+
 **Stats embed fields:** Total | Pending | In Progress | Closed
 
 **Commands:** `/ticket setup`, `/ticket close [reason]`, `/ticket add @user`, `/ticket remove @user`
@@ -332,6 +354,7 @@ Setup: `/reactionrole add <message_link> <emoji> @role` or via Dashboard panel.
 
 **Starboard** (disabled by default):
 - `messageReactionAdd` with ⭐ → count stars on original message
+- Skip if reactor = message author (no self-starring)
 - If stars ≥ threshold AND no existing StarboardEntry → post to starboard channel, save entry
 - If stars change → edit starboard message (update count)
 - If stars drop below threshold → delete starboard message, remove entry
@@ -341,6 +364,8 @@ Social structure — no bank, no quests, no bonuses.
 
 **Data:** name, leaderId, members (from GuildMember), createdAt
 **Family XP** = sum of `Profile.totalXp` of all members (computed, not stored)
+
+**Performance:** family leaderboard query is a grouped JOIN over Profile. Cache result per guild for 5 minutes (in-memory Map). Invalidate on any member XP change in that guild.
 
 **Commands:** `/family create <name>`, `/family info [name]`, `/family join <name>`, `/family leave`, `/family invite @user`, `/family kick @user`, `/family top`
 
