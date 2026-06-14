@@ -10,5 +10,11 @@
     "dev": "node dist/main.js",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "node --test"
+  },
+  "dependencies": {
+    "@sailorclawbot/contracts": "workspace:*",
+    "@sailorclawbot/core": "workspace:*",
+    "@sailorclawbot/database": "workspace:*",
+    "discord.js": "^14.26.4"
   }
 }
