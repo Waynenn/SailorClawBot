@@ -88,7 +88,7 @@ export class ModerationService {
 
     const warningCount = await this.warnings.count(guildId, userId);
     let autoMuted = false;
-    if (warningCount >= AUTO_MUTE_THRESHOLD) {
+    if (warningCount === AUTO_MUTE_THRESHOLD) {
       autoMuted = await this.tryAutoMute(guildId, userId, moderatorId, warningCount);
     }
 
@@ -123,10 +123,10 @@ export class ModerationService {
 
     const existing = await this.mutes.findByGuildAndUser(guildId, userId);
     if (existing?.isActive) {
-      throw new ConflictError(
-        `User is already muted until ${existing.expiresAt.toISOString()}`,
-        'USER_ALREADY_MUTED'
-      );
+      const until = existing.expiresAt instanceof Date
+        ? existing.expiresAt.toISOString()
+        : String(existing.expiresAt);
+      throw new ConflictError(`User is already muted until ${until}`, 'USER_ALREADY_MUTED');
     }
 
     const expiresAt = new Date(Date.now() + durationMinutes * 60_000);
@@ -329,7 +329,7 @@ export class ModerationService {
     if (override) {
       return override.allowed;
     }
-    return true;
+    return false;
   }
 
   /**
@@ -358,7 +358,7 @@ export class ModerationService {
       );
       return true;
     } catch (error) {
-      if (error instanceof ConflictError) {
+      if (error instanceof ConflictError || error instanceof PermissionDeniedError) {
         return false;
       }
       throw error;

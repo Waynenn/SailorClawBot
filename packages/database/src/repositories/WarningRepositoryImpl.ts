@@ -72,6 +72,10 @@ export class WarningRepositoryImpl implements WarningRepository {
     if (!userId || userId.trim().length === 0) {
       throw new ValidationError('User ID cannot be empty', 'userId');
     }
-    return this.db.warning.count({ where: { guildId, userId } });
+    try {
+      return await this.db.warning.count({ where: { guildId, userId } });
+    } catch (error) {
+      translatePrismaError(error, 'count warnings');
+    }
   }
 }

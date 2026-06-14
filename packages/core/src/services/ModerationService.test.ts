@@ -37,7 +37,7 @@ function createHarness(opts: HarnessOptions = {}) {
   const warnings: WarningRepository = {
     findById: async () => null,
     findByGuildAndUser: async () => [],
-    count: async () => opts.warningCount ?? 0,
+    count: async () => (opts.warningCount ?? 0) + warningCreates.length,
     create: async (input) => {
       const dto: WarningDto = { id: `warn_${warningCreates.length + 1}`, createdAt: new Date(), ...input };
       warningCreates.push(dto);
@@ -155,7 +155,7 @@ const allowOverride: PermissionOverrideDto = {
 };
 
 test('warnUser creates a warning, a case, and emits moderation.warned', async () => {
-  const h = createHarness();
+  const h = createHarness({ permission: allowOverride });
   const warning = await h.service.warnUser('g1', 'u1', 'spam', 'mod1');
 
   assert.equal(warning.guildId, 'g1');
@@ -187,7 +187,7 @@ test('warnUser denies a non-moderator (override allowed=false)', async () => {
 });
 
 test('warnUser auto-mutes after reaching the warning threshold', async () => {
-  const h = createHarness({ warningCount: 3 });
+  const h = createHarness({ warningCount: 2, permission: allowOverride });
   await h.service.warnUser('g1', 'u1', 'spam', 'mod1');
 
   assert.equal(h.muteCreates.length, 1);
@@ -209,7 +209,7 @@ test('muteUser rejects a user who is already actively muted', async () => {
     isActive: true,
     createdAt: new Date(),
   };
-  const h = createHarness({ existingMute: activeMute });
+  const h = createHarness({ existingMute: activeMute, permission: allowOverride });
   await assert.rejects(() => h.service.muteUser('g1', 'u1', 60, 'mod1'), ConflictError);
 });
 
@@ -219,7 +219,7 @@ test('muteUser rejects a non-positive duration', async () => {
 });
 
 test('banUser bans and emits moderation.banned', async () => {
-  const h = createHarness();
+  const h = createHarness({ permission: allowOverride });
   const ban = await h.service.banUser('g1', 'u1', 'raiding', 'mod1');
 
   assert.equal(ban.isActive, true);
@@ -228,6 +228,6 @@ test('banUser bans and emits moderation.banned', async () => {
 });
 
 test('unmuteUser throws when the user is not muted', async () => {
-  const h = createHarness({ existingMute: null });
+  const h = createHarness({ existingMute: null, permission: allowOverride });
   await assert.rejects(() => h.service.unmuteUser('g1', 'u1', 'mod1'), ConflictError);
 });

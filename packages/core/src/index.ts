@@ -7,4 +7,7 @@ export * from './common/events/EventBus.js';
 export * from './common/logging/Logger.js';
 export * from './services/ProfileService.js';
 export * from './services/GuildService.js';
+export * from './services/EconomyService.js';
+export * from './services/TicketService.js';
+export * from './services/FamilyService.js';
 export * from './services/ModerationService.js';

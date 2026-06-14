@@ -27,7 +27,7 @@ export class MuteRepositoryImpl implements MuteRepository {
       throw new ValidationError('User ID cannot be empty', 'userId');
     }
     const row = await this.db.mute.findFirst({
-      where: { guildId, userId },
+      where: { guildId, userId, isActive: true },
       orderBy: { createdAt: 'desc' },
     });
     return row ? toMuteDto(row) : null;
