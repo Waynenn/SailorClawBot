@@ -231,3 +231,97 @@ test('unmuteUser throws when the user is not muted', async () => {
   const h = createHarness({ existingMute: null, permission: allowOverride });
   await assert.rejects(() => h.service.unmuteUser('g1', 'u1', 'mod1'), ConflictError);
 });
+
+test('muteUser mutes a user and emits moderation.muted', async () => {
+  const h = createHarness({ permission: allowOverride });
+  const mute = await h.service.muteUser('g1', 'u1', 60, 'mod1', 'flooding');
+
+  assert.equal(mute.isActive, true);
+  assert.equal(mute.duration, 60);
+  assert.equal(h.muteCreates.length, 1);
+  assert.equal(h.caseCreates.length, 1);
+  assert.equal(h.caseCreates[0]?.type, 'mute');
+  assert.ok(h.events.some((e) => e.name === 'moderation.muted'));
+});
+
+test('muteUser already muted with string expiresAt still throws ConflictError', async () => {
+  const activeMute: MuteDto = {
+    id: 'm1',
+    guildId: 'g1',
+    userId: 'u1',
+    moderatorId: 'mod1',
+    caseNumber: 1,
+    duration: 60,
+    expiresAt: new Date(Date.now() + 3_600_000),
+    isActive: true,
+    createdAt: new Date(),
+  };
+  const h = createHarness({ existingMute: { ...activeMute, expiresAt: '2099-01-01T00:00:00.000Z' as unknown as Date }, permission: allowOverride });
+  await assert.rejects(() => h.service.muteUser('g1', 'u1', 60, 'mod1'), ConflictError);
+});
+
+test('unmuteUser deactivates an active mute and emits moderation.unmuted', async () => {
+  const activeMute: MuteDto = {
+    id: 'm1',
+    guildId: 'g1',
+    userId: 'u1',
+    moderatorId: 'mod1',
+    caseNumber: 1,
+    duration: 60,
+    expiresAt: new Date(Date.now() + 3_600_000),
+    isActive: true,
+    createdAt: new Date(),
+  };
+  const h = createHarness({ existingMute: activeMute, permission: allowOverride });
+  await h.service.unmuteUser('g1', 'u1', 'mod1');
+
+  assert.ok(h.events.some((e) => e.name === 'moderation.unmuted'));
+});
+
+test('banUser throws ConflictError when user is already banned', async () => {
+  const activeBan: BanDto = {
+    id: 'b1',
+    guildId: 'g1',
+    userId: 'u1',
+    reason: 'raiding',
+    moderatorId: 'mod1',
+    caseNumber: 1,
+    isActive: true,
+    createdAt: new Date(),
+  };
+  const h = createHarness({ existingBan: activeBan, permission: allowOverride });
+  await assert.rejects(() => h.service.banUser('g1', 'u1', 'raiding', 'mod1'), ConflictError);
+});
+
+test('banUser creates a temporary ban with expiresAt when durationDays provided', async () => {
+  const h = createHarness({ permission: allowOverride });
+  const ban = await h.service.banUser('g1', 'u1', 'raiding', 'mod1', 7);
+
+  assert.ok(ban.expiresAt instanceof Date);
+  assert.equal(h.banCreates.length, 1);
+  assert.ok(h.events.some((e) => e.name === 'moderation.banned'));
+  const payload = h.events.find((e) => e.name === 'moderation.banned')?.payload as { temporary: boolean };
+  assert.equal(payload.temporary, true);
+});
+
+test('unbanUser deactivates an active ban and emits moderation.unbanned', async () => {
+  const activeBan: BanDto = {
+    id: 'b1',
+    guildId: 'g1',
+    userId: 'u1',
+    reason: 'raiding',
+    moderatorId: 'mod1',
+    caseNumber: 1,
+    isActive: true,
+    createdAt: new Date(),
+  };
+  const h = createHarness({ existingBan: activeBan, permission: allowOverride });
+  await h.service.unbanUser('g1', 'u1', 'mod1');
+
+  assert.ok(h.events.some((e) => e.name === 'moderation.unbanned'));
+});
+
+test('unbanUser throws ConflictError when user is not banned', async () => {
+  const h = createHarness({ existingBan: null, permission: allowOverride });
+  await assert.rejects(() => h.service.unbanUser('g1', 'u1', 'mod1'), ConflictError);
+});
