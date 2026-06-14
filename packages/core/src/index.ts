@@ -12,3 +12,4 @@ export * from './services/TicketService.js';
 export * from './services/FamilyService.js';
 export * from './services/ModerationService.js';
 export * from './services/PermissionService.js';
+export * from './services/XpService.js';

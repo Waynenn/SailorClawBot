@@ -15,6 +15,9 @@ function makeProfile(overrides: Partial<ProfileDto> = {}): ProfileDto {
     guildId: 'guild_1',
     userId: 'user_1',
     displayName: null,
+    xp: 0,
+    level: 0,
+    totalXp: 0,
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,
@@ -37,6 +40,10 @@ function createHarness(existing: ProfileDto | null = null) {
       stored = { ...stored, ...changes, updatedAt: NOW };
       return stored;
     },
+    updateXp: async (_g, _u, data) => makeProfile(data),
+    findLeaderboard: async () => stored ? [stored] : [],
+    countByGuild: async () => stored ? 1 : 0,
+    findRank: async () => 1,
   };
 
   const bus: EventBus = {

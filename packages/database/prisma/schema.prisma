@@ -7,6 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ============================================================================
+// CORE
+// ============================================================================
+
 model Guild {
   id                  String               @id
   name                String
@@ -23,6 +27,7 @@ model Guild {
   cases               Case[]
   permissionOverrides PermissionOverride[]
   caseCounter         GuildCaseCounter?
+  settings            GuildSettings?
 }
 
 model GuildMember {
@@ -39,22 +44,37 @@ model Profile {
   guildId     String
   userId      String
   displayName String?
+  xp          Int      @default(0)
+  level       Int      @default(0)
+  totalXp     Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   guild       Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
   @@unique([guildId, userId])
+  @@index([guildId, totalXp])
 }
 
 model Wallet {
-  id           String        @id @default(cuid())
-  guildId      String
-  userId       String
-  balance      BigInt        @default(0)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  guild        Guild         @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
+  id              String        @id @default(cuid())
+  guildId         String
+  userId          String
+  balance         BigInt        @default(0)
+  // Economy cooldowns (persisted — survive bot restarts)
+  lastDailyAt     DateTime?
+  lastWorkAt      DateTime?
+  lastCrimeAt     DateTime?
+  lastRobAt       DateTime?
+  // Daily limits (lazy reset via dailyLimitReset)
+  workUsesToday   Int           @default(0)
+  crimeUsesToday  Int           @default(0)
+  dailyLimitReset DateTime?
+  // Active boosts: [{type, multiplier, expiresAt}]
+  activeBoosts    Json          @default("[]")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  guild           Guild         @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  transactions    Transaction[]
 
   @@unique([guildId, userId])
 }
@@ -68,32 +88,351 @@ model Transaction {
   wallet    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
 }
 
+// ============================================================================
+// GUILD SETTINGS
+// ============================================================================
+
+model GuildSettings {
+  guildId String @id
+  guild   Guild  @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  // Tickets
+  ticketCategoryId     String?
+  ticketChannelId      String?
+  ticketStatsMessageId String?
+  ticketLogChannelId   String?
+
+  // Welcome / Leave
+  welcomeChannelId String?
+  welcomeMessage   String? // JSON embed template: {username},{mention},{server},{memberCount},{date}
+  leaveChannelId   String?
+  leaveMessage     String?
+  welcomeDm        Boolean @default(false)
+
+  // Leveling
+  xpEnabled        Boolean @default(true)
+  xpMin            Int     @default(15)
+  xpMax            Int     @default(25)
+  xpCooldown       Int     @default(60) // seconds between XP grants
+  levelUpChannelId String? // null = current channel; "dm" = DM user
+  levelUpDm        Boolean @default(false)
+  levelUpMessage   String? // template: "GG {mention}, you reached level {level}!"
+
+  // Starboard
+  starboardEnabled   Boolean @default(false)
+  starboardChannelId String?
+  starboardThreshold Int     @default(3)
+
+  // Logging
+  logChannelId String?
+  logEvents    Json    @default("[]") // string[] of enabled event types
+
+  // Embed colors (hex strings, keyed by action type)
+  embedColors Json @default("{}")
+
+  // Locale
+  locale String @default("en") // "en" | "ru"
+
+  // Economy (BigInt for monetary values)
+  currencyName         String  @default("coins")
+  currencyEmoji        String  @default("🪙")
+  dailyAmount          BigInt  @default(100)
+  startingBalance      BigInt  @default(0)
+  workMin              BigInt  @default(50)
+  workMax              BigInt  @default(200)
+  crimeMin             BigInt  @default(100)
+  crimeMax             BigInt  @default(500)
+  gamblingMinBet       BigInt  @default(10)
+  gamblingMaxBet       BigInt  @default(10000)
+  robMinTargetBalance  BigInt  @default(100)
+  treasuryBalance      BigInt  @default(0)
+  transferTaxPercent   Int     @default(5)
+  shopTaxPercent       Int     @default(0)
+  // Anti-inflation daily limits
+  dailyWorkLimit         Int   @default(3)
+  dailyCrimeLimit        Int   @default(2)
+  workDiminishingFactor  Float @default(0.5)
+  crimeDiminishingFactor Float @default(0.5)
+
+  // Family limits
+  familyCreationEnabled  Boolean @default(true)
+  maxFamilies            Int?
+  maxFamilyMembers       Int     @default(20)
+  familyRequireApproval  Boolean @default(false)
+  familyCreationMode     String  @default("coins") // "coins" | "item" | "both"
+  familyCreationCost     BigInt  @default(5000)
+  familyNameChangeCost   BigInt  @default(2000)
+}
+
+// ============================================================================
+// PERMISSIONS
+// ============================================================================
+
+model PermissionOverride {
+  id         String  @id @default(cuid())
+  guildId    String
+  userId     String
+  permission String
+  allowed    Boolean
+  guild      Guild   @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId, permission])
+  @@index([guildId, userId])
+}
+
+model RoleMapping {
+  id         String @id @default(cuid())
+  guildId    String
+  roleId     String // Discord role Snowflake
+  permission String // "can_warn"|"can_mute"|"can_ban"|"can_kick"|"can_manage_tickets"|"can_manage_guild"
+
+  @@unique([guildId, roleId, permission])
+  @@index([guildId, roleId])
+}
+
+// ============================================================================
+// LEVELING
+// ============================================================================
+
+model LevelRole {
+  id      String @id @default(cuid())
+  guildId String
+  level   Int
+  roleId  String // Discord role to assign at this level
+
+  @@unique([guildId, level])
+  @@index([guildId])
+}
+
+model XpMultiplier {
+  id         String @id @default(cuid())
+  guildId    String
+  targetId   String // channel or role Snowflake
+  targetType String // "channel" | "role"
+  multiplier Float  @default(1.0)
+
+  @@unique([guildId, targetId, targetType])
+  @@index([guildId])
+}
+
+model NoXpTarget {
+  id         String @id @default(cuid())
+  guildId    String
+  targetId   String // channel or role Snowflake
+  targetType String // "channel" | "role"
+
+  @@unique([guildId, targetId])
+  @@index([guildId])
+}
+
+// ============================================================================
+// TWITCH NOTIFICATIONS
+// ============================================================================
+
+model TwitchSubscription {
+  id              String   @id @default(cuid())
+  guildId         String
+  twitchLogin     String   // lowercase Twitch channel login
+  notifyChannelId String   // Discord channel Snowflake to send notification
+  mentionRoleId   String?  // optional Discord role to ping
+  customMessage   String?  // template: {streamer}, {title}, {game}, {url}
+  lastStreamId    String?  // last notified stream id (dedup)
+  createdAt       DateTime @default(now())
+
+  @@unique([guildId, twitchLogin])
+  @@index([guildId])
+}
+
+// ============================================================================
+// ECONOMY SHOP
+// ============================================================================
+
+model Item {
+  id             String          @id @default(cuid())
+  guildId        String
+  name           String
+  description    String?
+  price          BigInt
+  emoji          String?
+  type           String          // "role"|"badge"|"frame"|"background"|"xp_boost"|"color"|"family_slot"|"name_change"|"consumable"
+  effect         Json?           // type-specific config: { roleId } | { emoji } | { multiplier, durationHours } | ...
+  stock          Int?            // null = unlimited
+  createdAt      DateTime        @default(now())
+  inventoryItems InventoryItem[]
+
+  @@index([guildId])
+}
+
+model InventoryItem {
+  id        String   @id @default(cuid())
+  guildId   String
+  userId    String
+  itemId    String
+  quantity  Int      @default(1)
+  acquiredAt DateTime @default(now())
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId, itemId])
+  @@index([guildId, userId])
+}
+
+// ============================================================================
+// FAMILY / CLAN
+// ============================================================================
+
+enum FamilyRole {
+  OWNER
+  OFFICER
+  MEMBER
+}
+
 model Family {
-  id          String   @id @default(cuid())
+  id          String         @id @default(cuid())
   guildId     String
   name        String
   ownerUserId String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  guild       Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  guild       Guild          @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  members     FamilyMember[]
 
   @@unique([guildId, name])
+  @@index([guildId])
+}
+
+model FamilyMember {
+  id       String     @id @default(cuid())
+  guildId  String
+  familyId String
+  userId   String
+  role     FamilyRole @default(MEMBER)
+  joinedAt DateTime   @default(now())
+  family   Family     @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId]) // one family per user per guild
+  @@index([familyId])
+}
+
+// ============================================================================
+// TICKETS
+// ============================================================================
+
+enum TicketStatus {
+  open
+  claimed
+  closed
 }
 
 model Ticket {
   id             String       @id @default(cuid())
   guildId        String
   openedByUserId String
-  channelId      String?
+  channelId      String?      // Discord channel Snowflake of ticket channel
+  claimedById    String?      // userId of staff who claimed
+  claimedAt      DateTime?
+  closedById     String?      // userId who closed
+  rating         Int?         // 1-5 user rating
+  subject        String?      // original message content
   status         TicketStatus @default(open)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   guild          Guild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, status])
+  @@index([guildId, openedByUserId])
 }
 
-enum TicketStatus {
-  open
-  closed
+// ============================================================================
+// AUTO-MODERATION
+// ============================================================================
+
+model AutoModRule {
+  id      String  @id @default(cuid())
+  guildId String
+  type    String  // "spam"|"links"|"caps"|"invites"|"mentions"|"words"
+  enabled Boolean @default(true)
+  // config shape per type:
+  // spam:     { threshold: number, windowMs: number, action: string, duration?: number }
+  // links:    { whitelist: string[], action: string }
+  // caps:     { threshold: number, action: string }
+  // invites:  { whitelist: string[], action: string }
+  // mentions: { max: number, action: string, duration?: number }
+  // words:    { patterns: string[], action: string, duration?: number }
+  config  Json
+
+  @@unique([guildId, type])
+  @@index([guildId])
+}
+
+// ============================================================================
+// SERVER MANAGEMENT
+// ============================================================================
+
+model ReactionRole {
+  id        String @id @default(cuid())
+  guildId   String
+  messageId String
+  channelId String
+  emoji     String // Unicode emoji or custom emoji id
+  roleId    String // Discord role Snowflake
+
+  @@unique([guildId, messageId, emoji])
+  @@index([guildId, messageId])
+}
+
+model Giveaway {
+  id           String    @id @default(cuid())
+  guildId      String
+  channelId    String
+  messageId    String?   // Discord message Snowflake of giveaway embed
+  prize        String
+  winnersCount Int       @default(1)
+  endsAt       DateTime
+  endedAt      DateTime?
+  hostId       String    // userId who created giveaway
+  participants Json      @default("[]") // string[] of userIds
+  winners      Json      @default("[]") // string[] of winner userIds
+
+  @@index([guildId])
+  @@index([endsAt])
+}
+
+model StarboardEntry {
+  id             String @id @default(cuid())
+  guildId        String
+  originalMsgId  String // Snowflake of original message
+  starboardMsgId String // Snowflake of reposted message in starboard channel
+  authorId       String
+  channelId      String // original channel
+  starCount      Int    @default(0)
+
+  @@unique([guildId, originalMsgId])
+  @@index([guildId])
+}
+
+// ============================================================================
+// ACHIEVEMENTS
+// ============================================================================
+
+model Achievement {
+  id               String            @id @default(cuid())
+  key              String            @unique // e.g. "first_message", "level_10"
+  name             String
+  description      String
+  emoji            String
+  userAchievements UserAchievement[]
+}
+
+model UserAchievement {
+  id            String      @id @default(cuid())
+  guildId       String
+  userId        String
+  achievementId String
+  unlockedAt    DateTime    @default(now())
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId, achievementId])
+  @@index([guildId, userId])
 }
 
 // ============================================================================
@@ -128,7 +467,7 @@ model Mute {
   reason      String?
   moderatorId String
   caseNumber  Int
-  duration    Int // minutes
+  duration    Int      // minutes
   expiresAt   DateTime
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -164,7 +503,7 @@ model Case {
   type         ModerationType
   userId       String
   moderatorId  String
-  action       String // reference to Warning/Mute/Ban id
+  action       String         // reference id to Warning/Mute/Ban/Kick record
   reason       String?
   metadata     Json?
   isAppealed   Boolean        @default(false)
@@ -178,20 +517,7 @@ model Case {
   @@index([guildId, userId])
 }
 
-model PermissionOverride {
-  id         String  @id @default(cuid())
-  guildId    String
-  userId     String
-  permission String
-  allowed    Boolean
-  guild      Guild   @relation(fields: [guildId], references: [id], onDelete: Cascade)
-
-  @@unique([guildId, userId, permission])
-  @@index([guildId, userId])
-}
-
-// Per-guild atomic counter for sequential, human-readable case numbers.
-// Incremented via upsert+increment to stay race-safe under concurrent moderation.
+// Per-guild atomic counter for sequential case numbers.
 model GuildCaseCounter {
   guildId    String @id
   lastNumber Int    @default(0)

@@ -1,4 +1,4 @@
-import type { Warning, Mute, Ban, Case, PermissionOverride, Guild, GuildMember, Profile } from '@prisma/client';
+import type { Warning, Mute, Ban, Case, PermissionOverride, Guild, GuildMember, Profile, LevelRole, XpMultiplier, NoXpTarget, GuildSettings, TwitchSubscription } from '@prisma/client';
 import type {
   WarningDto,
   MuteDto,
@@ -9,6 +9,11 @@ import type {
   GuildDto,
   GuildMemberDto,
   ProfileDto,
+  LevelRoleDto,
+  XpMultiplierDto,
+  NoXpTargetDto,
+  GuildSettingsDto,
+  TwitchSubscriptionDto,
 } from '@sailorclawbot/contracts';
 
 /**
@@ -110,7 +115,65 @@ export function toProfileDto(row: Profile): ProfileDto {
     guildId: row.guildId,
     userId: row.userId,
     displayName: row.displayName,
+    xp: row.xp,
+    level: row.level,
+    totalXp: row.totalXp,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  };
+}
+
+export function toLevelRoleDto(row: LevelRole): LevelRoleDto {
+  return {
+    id: row.id,
+    guildId: row.guildId,
+    level: row.level,
+    roleId: row.roleId,
+  };
+}
+
+export function toXpMultiplierDto(row: XpMultiplier): XpMultiplierDto {
+  return {
+    id: row.id,
+    guildId: row.guildId,
+    targetId: row.targetId,
+    targetType: row.targetType as 'channel' | 'role',
+    multiplier: row.multiplier,
+  };
+}
+
+export function toNoXpTargetDto(row: NoXpTarget): NoXpTargetDto {
+  return {
+    id: row.id,
+    guildId: row.guildId,
+    targetId: row.targetId,
+    targetType: row.targetType as 'channel' | 'role',
+  };
+}
+
+export function toGuildSettingsDto(row: GuildSettings): GuildSettingsDto {
+  return {
+    guildId: row.guildId,
+    xpEnabled: row.xpEnabled,
+    xpMin: row.xpMin,
+    xpMax: row.xpMax,
+    xpCooldown: row.xpCooldown,
+    levelUpChannelId: row.levelUpChannelId,
+    levelUpDm: row.levelUpDm,
+    levelUpMessage: row.levelUpMessage,
+    locale: row.locale,
+  };
+}
+
+export function toTwitchSubscriptionDto(row: TwitchSubscription): TwitchSubscriptionDto {
+  return {
+    id: row.id,
+    guildId: row.guildId,
+    twitchLogin: row.twitchLogin,
+    notifyChannelId: row.notifyChannelId,
+    mentionRoleId: row.mentionRoleId,
+    customMessage: row.customMessage,
+    lastStreamId: row.lastStreamId,
+    createdAt: row.createdAt,
   };
 }

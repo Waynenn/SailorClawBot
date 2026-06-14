@@ -4,6 +4,8 @@ import { ValidationError } from '@sailorclawbot/core';
 import { toProfileDto } from './mappers.js';
 import { translatePrismaError } from './prisma-errors.js';
 
+
+
 export class ProfileRepositoryImpl implements ProfileRepository {
   public constructor(private readonly db: PrismaClient) {}
 
@@ -68,5 +70,47 @@ export class ProfileRepositoryImpl implements ProfileRepository {
     } catch (error) {
       translatePrismaError(error, 'update profile');
     }
+  }
+
+  public async updateXp(
+    guildId: SnowflakeId,
+    userId: SnowflakeId,
+    data: { xp: number; level: number; totalXp: number }
+  ): Promise<ProfileDto> {
+    try {
+      const row = await this.db.profile.update({
+        where: { guildId_userId: { guildId, userId } },
+        data,
+      });
+      return toProfileDto(row);
+    } catch (error) {
+      translatePrismaError(error, 'update profile xp');
+    }
+  }
+
+  public async findLeaderboard(guildId: SnowflakeId, skip: number, take: number): Promise<ProfileDto[]> {
+    const rows = await this.db.profile.findMany({
+      where: { guildId },
+      orderBy: { totalXp: 'desc' },
+      skip,
+      take,
+    });
+    return rows.map(toProfileDto);
+  }
+
+  public async countByGuild(guildId: SnowflakeId): Promise<number> {
+    return this.db.profile.count({ where: { guildId } });
+  }
+
+  public async findRank(guildId: SnowflakeId, userId: SnowflakeId): Promise<number> {
+    const profile = await this.db.profile.findUnique({
+      where: { guildId_userId: { guildId, userId } },
+      select: { totalXp: true },
+    });
+    if (!profile) return 0;
+    const above = await this.db.profile.count({
+      where: { guildId, totalXp: { gt: profile.totalXp } },
+    });
+    return above + 1;
   }
 }

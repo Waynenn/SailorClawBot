@@ -11,10 +11,16 @@ import { casesCommand } from './commands/moderation/cases.js';
 import { balanceCommand } from './commands/economy/balance.js';
 import { transferCommand } from './commands/economy/transfer.js';
 import { profileCommand } from './commands/profile/profile.js';
+import { rankCommand } from './commands/xp/rank.js';
+import { leaderboardCommand } from './commands/xp/leaderboard.js';
+import { xpCommand } from './commands/xp/xp.js';
+import { twitchCommand } from './commands/twitch/twitch.js';
 import { registerReadyHandler } from './events/ready.js';
 import { registerGuildCreateHandler } from './events/guildCreate.js';
 import { registerGuildDeleteHandler } from './events/guildDelete.js';
 import { registerInteractionHandler } from './events/interactionCreate.js';
+import { registerMessageCreateHandler } from './events/messageCreate.js';
+import { TwitchPoller } from './lib/TwitchPoller.js';
 
 const ALL_COMMANDS: Command[] = [
   warnCommand,
@@ -27,6 +33,10 @@ const ALL_COMMANDS: Command[] = [
   balanceCommand,
   transferCommand,
   profileCommand,
+  rankCommand,
+  leaderboardCommand,
+  xpCommand,
+  twitchCommand,
 ];
 
 export async function startBot(): Promise<void> {
@@ -41,6 +51,7 @@ export async function startBot(): Promise<void> {
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildModeration,
+      GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
     ],
   });
@@ -54,6 +65,18 @@ export async function startBot(): Promise<void> {
   registerGuildCreateHandler(client, guildService, logger);
   registerGuildDeleteHandler(client, logger);
   registerInteractionHandler(client, commands, container, logger);
+  registerMessageCreateHandler(client, container);
+
+  // Twitch poller (only if credentials configured)
+  const twitchClientId = process.env.TWITCH_CLIENT_ID;
+  const twitchClientSecret = process.env.TWITCH_CLIENT_SECRET;
+  if (twitchClientId && twitchClientSecret) {
+    const poller = new TwitchPoller(client, container.twitchSubRepo, logger, twitchClientId, twitchClientSecret);
+    client.once('ready', () => poller.start());
+    logger.info('Twitch poller enabled');
+  } else {
+    logger.warn('TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET not set — Twitch notifications disabled');
+  }
 
   await client.login(token);
 }

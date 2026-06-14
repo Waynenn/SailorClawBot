@@ -2,6 +2,9 @@ import { PrismaClient } from '@prisma/client';
 import {
   GuildRepositoryImpl,
   GuildMemberRepositoryImpl,
+  GuildSettingsRepositoryImpl,
+  LevelRoleRepositoryImpl,
+  NoXpTargetRepositoryImpl,
   ProfileRepositoryImpl,
   WalletRepositoryImpl,
   TransactionRepositoryImpl,
@@ -13,6 +16,8 @@ import {
   RoleMappingRepositoryImpl,
   TicketRepositoryImpl,
   FamilyRepositoryImpl,
+  TwitchSubscriptionRepositoryImpl,
+  XpMultiplierRepositoryImpl,
 } from '@sailorclawbot/database';
 import {
   GuildService,
@@ -22,6 +27,7 @@ import {
   TicketService,
   FamilyService,
   PermissionService,
+  XpService,
 } from '@sailorclawbot/core';
 import { ConsoleLogger } from './lib/ConsoleLogger.js';
 import { InMemoryEventBus } from './lib/InMemoryEventBus.js';
@@ -33,6 +39,7 @@ function buildContainer() {
 
   const guildRepo = new GuildRepositoryImpl(prisma);
   const guildMemberRepo = new GuildMemberRepositoryImpl(prisma);
+  const guildSettingsRepo = new GuildSettingsRepositoryImpl(prisma);
   const profileRepo = new ProfileRepositoryImpl(prisma);
   const walletRepo = new WalletRepositoryImpl(prisma);
   const transactionRepo = new TransactionRepositoryImpl(prisma);
@@ -44,6 +51,10 @@ function buildContainer() {
   const roleMappingRepo = new RoleMappingRepositoryImpl(prisma);
   const ticketRepo = new TicketRepositoryImpl(prisma);
   const familyRepo = new FamilyRepositoryImpl(prisma);
+  const levelRoleRepo = new LevelRoleRepositoryImpl(prisma);
+  const xpMultiplierRepo = new XpMultiplierRepositoryImpl(prisma);
+  const noXpTargetRepo = new NoXpTargetRepositoryImpl(prisma);
+  const twitchSubRepo = new TwitchSubscriptionRepositoryImpl(prisma);
 
   const guildService = new GuildService(guildRepo, guildMemberRepo, eventBus, logger);
   const profileService = new ProfileService(profileRepo, eventBus, logger);
@@ -52,6 +63,7 @@ function buildContainer() {
   const ticketService = new TicketService(ticketRepo, eventBus, logger);
   const familyService = new FamilyService(familyRepo, logger);
   const permissionService = new PermissionService(permissionRepo, roleMappingRepo);
+  const xpService = new XpService(profileRepo, eventBus, logger);
 
   return {
     prisma,
@@ -64,6 +76,12 @@ function buildContainer() {
     ticketService,
     familyService,
     permissionService,
+    xpService,
+    guildSettingsRepo,
+    levelRoleRepo,
+    xpMultiplierRepo,
+    noXpTargetRepo,
+    twitchSubRepo,
   };
 }
 
