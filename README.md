@@ -22,27 +22,27 @@
 
 ## ✨ Features
 
-| Module | What it does | Status |
-|--------|--------------|--------|
-| 🛡️ **Moderation** | Warnings, mutes, bans, kicks, case history, appeals, auto-mute | 🟢 Core built |
-| 💰 **Economy & Shop** | Wallets, transactions, daily rewards, role/item shop, leaderboards | 🟡 Planned |
-| 🎫 **Tickets** | Support tickets — open, assign, close, transcripts | 🟡 Planned |
-| 👤 **Profiles & Leveling** | Profile cards, XP, levels, leaderboards | 🟡 Planned |
-| 💎 **Premium** | Subscription tiers & entitlements | 🟡 Planned |
-| 🖥️ **Dashboard** | Role-based web panel (Owner / Admin / User) | 🟡 Planned |
+| Module                     | What it does                                                       | Status        |
+| -------------------------- | ------------------------------------------------------------------ | ------------- |
+| 🛡️ **Moderation**          | Warnings, mutes, bans, kicks, case history, appeals, auto-mute     | 🟢 Core built |
+| 💰 **Economy & Shop**      | Wallets, transactions, daily rewards, role/item shop, leaderboards | 🟡 Planned    |
+| 🎫 **Tickets**             | Support tickets — open, assign, close, transcripts                 | 🟡 Planned    |
+| 👤 **Profiles & Leveling** | Profile cards, XP, levels, leaderboards                            | 🟡 Planned    |
+| 💎 **Premium**             | Subscription tiers & entitlements                                  | 🟡 Planned    |
+| 🖥️ **Dashboard**           | Role-based web panel (Owner / Admin / User)                        | 🟡 Planned    |
 
 ## 🌍 Localization
 
 The bot and dashboard are being built **i18n-first**. Per-guild language is stored in guild settings.
 
-| Language | Code | Docs | Bot UI |
-|----------|------|:----:|:------:|
-| 🇬🇧 English | `en` | ✅ | 🔜 |
-| 🇷🇺 Русский | `ru` | ✅ | 🔜 |
-| 🇺🇦 Українська | `uk` | — | 🔜 |
-| 🇪🇸 Español | `es` | — | 🔜 |
-| 🇩🇪 Deutsch | `de` | — | 🔜 |
-| 🇫🇷 Français | `fr` | — | 🔜 |
+| Language      | Code | Docs | Bot UI |
+| ------------- | ---- | :--: | :----: |
+| 🇬🇧 English    | `en` |  ✅  |   🔜   |
+| 🇷🇺 Русский    | `ru` |  ✅  |   🔜   |
+| 🇺🇦 Українська | `uk` |  —   |   🔜   |
+| 🇪🇸 Español    | `es` |  —   |   🔜   |
+| 🇩🇪 Deutsch    | `de` |  —   |   🔜   |
+| 🇫🇷 Français   | `fr` |  —   |   🔜   |
 
 > 📘 **Docs policy:** all GitHub documentation is maintained in **🇬🇧 English + 🇷🇺 Русский**. See [`docs/I18N.md`](docs/I18N.md) for the localization plan.
 

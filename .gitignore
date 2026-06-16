@@ -1,34 +1,43 @@
 # Dependencies
-node_modules
+node_modules/
 
 # Secrets / env
 .env
 .env.*
 !.env.example
+.mcp.json
 
 # Build output
-.next
-dist
-out
-coverage
-.turbo
+.next/
+dist/
+out/
+coverage/
+.turbo/
 *.tsbuildinfo
 
 # Prisma generated client (regenerated via `prisma generate`)
-# (kept out of git; CI runs generate)
+packages/database/node_modules/.prisma/
 
-# Tooling runtime (machine-specific Claude/ruflo workspace)
+# Knowledge graph outputs
+graphify-out/
+
+# AI tooling workspace files (machine-specific, not project state)
 .claude-flow/
 .claude/
+.swarm/
+.hive-mind/
+coordination/
+claude-flow.config.json
 
 # OS / editor
 .DS_Store
 Thumbs.db
 *.log
 npm-debug.log*
+.vscode/settings.json
 
 # Archive checkpoints
 archives/checkpoints/*.zip
 
-# Stale nested duplicate (pending removal) — never stage its embedded git repo
+# Stale nested duplicate — never stage its embedded git repo
 /SailorClawBot/
