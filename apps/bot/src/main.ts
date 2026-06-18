@@ -22,6 +22,7 @@ import { shopCommand } from './commands/economy/shop.js';
 import { buyCommand } from './commands/economy/buy.js';
 import { sellCommand } from './commands/economy/sell.js';
 import { inventoryCommand } from './commands/economy/inventory.js';
+import { ticketCommand } from './commands/tickets/ticket.js';
 import { profileCommand } from './commands/profile/profile.js';
 import { rankCommand } from './commands/xp/rank.js';
 import { leaderboardCommand } from './commands/xp/leaderboard.js';
@@ -56,6 +57,7 @@ const ALL_COMMANDS: Command[] = [
   buyCommand,
   sellCommand,
   inventoryCommand,
+  ticketCommand,
   profileCommand,
   rankCommand,
   leaderboardCommand,

@@ -30,6 +30,11 @@ export interface GuildSettingsDto {
   dailyCrimeLimit: number;
   workDiminishingFactor: number;
   crimeDiminishingFactor: number;
+  // Tickets
+  ticketChannelId: string | null;
+  ticketCategoryId: string | null;
+  ticketStatsMessageId: string | null;
+  ticketLogChannelId: string | null;
 }
 
 export interface TwitchSubscriptionDto {
@@ -162,7 +167,12 @@ export interface TicketDto {
   guildId: SnowflakeId;
   openedByUserId: SnowflakeId;
   channelId: SnowflakeId | null;
-  status: 'open' | 'closed';
+  claimedById: SnowflakeId | null;
+  claimedAt: Date | null;
+  closedById: SnowflakeId | null;
+  rating: number | null;
+  subject: string | null;
+  status: 'open' | 'claimed' | 'closed';
   createdAt: Date;
   updatedAt: Date;
 }

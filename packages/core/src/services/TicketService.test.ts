@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { TicketRepository, TicketDto } from '@sailorclawbot/contracts';
+import type { TicketRepository, TicketDto, TicketStats } from '@sailorclawbot/contracts';
 import type { EventBus, DomainEvent } from '../common/events/EventBus.js';
 import type { Logger } from '../common/logging/Logger.js';
 import { TicketService } from './TicketService.js';
@@ -15,6 +15,11 @@ function makeTicket(overrides: Partial<TicketDto> = {}): TicketDto {
     guildId: 'g',
     openedByUserId: 'u',
     channelId: null,
+    claimedById: null,
+    claimedAt: null,
+    closedById: null,
+    rating: null,
+    subject: null,
     status: 'open',
     createdAt: NOW,
     updatedAt: NOW,
@@ -28,14 +33,36 @@ function createHarness(stored: TicketDto | null = null) {
 
   const tickets: TicketRepository = {
     findById: async () => ticket,
-    listOpenByGuild: async () => (ticket?.status === 'open' ? [ticket] : []),
+    findByChannel: async (channelId) => (ticket?.channelId === channelId ? ticket : null),
+    listOpenByGuild: async () => (ticket?.status === 'open' || ticket?.status === 'claimed' ? [ticket] : []),
+    countByStatus: async (): Promise<TicketStats> => ({
+      open: ticket?.status === 'open' ? 1 : 0,
+      claimed: ticket?.status === 'claimed' ? 1 : 0,
+      closed: ticket?.status === 'closed' ? 1 : 0,
+    }),
+    countAll: async () => (ticket ? 1 : 0),
     create: async (input) => {
-      ticket = makeTicket({ guildId: input.guildId, openedByUserId: input.openedByUserId, channelId: input.channelId });
+      ticket = makeTicket({ guildId: input.guildId, openedByUserId: input.openedByUserId, channelId: input.channelId, subject: input.subject });
+      return ticket;
+    },
+    claim: async (id, claimedById) => {
+      if (!ticket) throw new Error('not found');
+      ticket = { ...ticket, status: 'claimed', claimedById, claimedAt: NOW };
       return ticket;
     },
     close: async () => {
       if (!ticket) throw new Error('not found');
       ticket = { ...ticket, status: 'closed' };
+      return ticket;
+    },
+    closeWithDetails: async (id, closedById) => {
+      if (!ticket) throw new Error('not found');
+      ticket = { ...ticket, status: 'closed', closedById };
+      return ticket;
+    },
+    setRating: async (id, rating) => {
+      if (!ticket) throw new Error('not found');
+      ticket = { ...ticket, rating };
       return ticket;
     },
   };
@@ -87,4 +114,53 @@ test('listOpenByGuild — returns open tickets', async () => {
   const result = await svc.listOpenByGuild('g');
   assert.equal(result.length, 1);
   assert.equal(result[0].status, 'open');
+});
+
+test('claimTicket — sets status to claimed', async () => {
+  const { tickets, bus, logger } = createHarness(makeTicket());
+  const svc = new TicketService(tickets, bus, logger);
+
+  const result = await svc.claimTicket('ticket_1', 'staff_1');
+  assert.equal(result.status, 'claimed');
+  assert.equal(result.claimedById, 'staff_1');
+});
+
+test('claimTicket — throws ConflictError on closed ticket', async () => {
+  const { tickets, bus, logger } = createHarness(makeTicket({ status: 'closed' }));
+  const svc = new TicketService(tickets, bus, logger);
+
+  await assert.rejects(() => svc.claimTicket('ticket_1', 'staff_1'), (e) => { assert.ok(e instanceof ConflictError); return true; });
+});
+
+test('claimTicket — throws ConflictError on already claimed ticket', async () => {
+  const { tickets, bus, logger } = createHarness(makeTicket({ status: 'claimed', claimedById: 'staff_1' }));
+  const svc = new TicketService(tickets, bus, logger);
+
+  await assert.rejects(() => svc.claimTicket('ticket_1', 'staff_2'), (e) => { assert.ok(e instanceof ConflictError); return true; });
+});
+
+test('rateTicket — saves rating', async () => {
+  const { tickets, bus, logger } = createHarness(makeTicket({ status: 'closed' }));
+  const svc = new TicketService(tickets, bus, logger);
+
+  const result = await svc.rateTicket('ticket_1', 5);
+  assert.equal(result.rating, 5);
+});
+
+test('getStats — returns counts by status', async () => {
+  const { tickets, bus, logger } = createHarness(makeTicket());
+  const svc = new TicketService(tickets, bus, logger);
+
+  const stats = await svc.getStats('g');
+  assert.equal(stats.open, 1);
+  assert.equal(stats.claimed, 0);
+  assert.equal(stats.closed, 0);
+});
+
+test('nextTicketNumber — returns count + 1', async () => {
+  const { tickets, bus, logger } = createHarness(makeTicket());
+  const svc = new TicketService(tickets, bus, logger);
+
+  const num = await svc.nextTicketNumber('g');
+  assert.equal(num, 2);
 });

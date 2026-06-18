@@ -13,6 +13,7 @@ import {
   type BlackjackSession,
 } from '../commands/economy/blackjack.js';
 import { buildShopEmbed, shopPageButtons, SHOP_PAGE_SIZE } from '../commands/economy/shop.js';
+import { buildTicketEmbed, ticketActionButtons, ratingButtons, updateStatsEmbed } from '../lib/ticketHelper.js';
 
 const PAGE_SIZE = 10;
 
@@ -159,6 +160,51 @@ async function handleLeaderboardButton(interaction: ButtonInteraction, container
   await interaction.update({ embeds: [embed], components: [row] });
 }
 
+async function handleTicketButton(interaction: ButtonInteraction, container: Container): Promise<void> {
+  // customId: ticket_claim_{id} | ticket_close_{id} | ticket_rate_{id}_{rating}
+  const parts = interaction.customId.split('_');
+  const action = parts[1];
+  const ticketId = parts[2];
+
+  if (action === 'claim') {
+    const ticket = await container.ticketService.claimTicket(ticketId, interaction.user.id);
+    const embed = buildTicketEmbed(ticket, 0).setTitle('🎫 Ticket').setFooter({ text: `Ticket ID: ${ticket.id}` });
+    await interaction.update({ embeds: [embed], components: [ticketActionButtons(ticketId)] });
+    if (interaction.guild) await updateStatsEmbed(interaction.guild, container);
+    return;
+  }
+
+  if (action === 'close') {
+    const ticket = await container.ticketService.closeTicketByUser(ticketId, interaction.user.id);
+    if (interaction.guild) await updateStatsEmbed(interaction.guild, container);
+
+    const ratingEmbed = new EmbedBuilder()
+      .setColor(EMBED_COLORS.tickets)
+      .setTitle('🔒 Ticket Closed')
+      .setDescription('Please rate your support experience:');
+    await interaction.update({ embeds: [ratingEmbed], components: [ratingButtons(ticketId)] });
+
+    // Delete channel after 60s
+    setTimeout(async () => {
+      await interaction.channel?.delete().catch(() => null);
+    }, 60_000);
+    return;
+  }
+
+  if (action === 'rate') {
+    const rating = parseInt(parts[3] ?? '0', 10);
+    if (rating >= 1 && rating <= 5) {
+      await container.ticketService.rateTicket(ticketId, rating);
+    }
+    const stars = '⭐'.repeat(rating);
+    const doneEmbed = new EmbedBuilder()
+      .setColor(EMBED_COLORS.tickets)
+      .setTitle('✅ Thanks for your feedback!')
+      .setDescription(`You rated this ticket: ${stars}`);
+    await interaction.update({ embeds: [doneEmbed], components: [] });
+  }
+}
+
 export function registerInteractionHandler(
   client: Client,
   commands: Map<string, Command>,
@@ -176,6 +222,8 @@ export function registerInteractionHandler(
           await handleBlackjackButton(interaction, container);
         } else if (interaction.customId.startsWith('shop_')) {
           await handleShopButton(interaction, container);
+        } else if (interaction.customId.startsWith('ticket_')) {
+          await handleTicketButton(interaction, container);
         }
       } catch (error) {
         logger.error('Button interaction error', { customId: interaction.customId, error: String(error) });

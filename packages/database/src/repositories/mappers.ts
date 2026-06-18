@@ -182,6 +182,10 @@ export function toGuildSettingsDto(row: GuildSettings): GuildSettingsDto {
     dailyCrimeLimit: row.dailyCrimeLimit,
     workDiminishingFactor: row.workDiminishingFactor,
     crimeDiminishingFactor: row.crimeDiminishingFactor,
+    ticketChannelId: row.ticketChannelId,
+    ticketCategoryId: row.ticketCategoryId,
+    ticketStatsMessageId: row.ticketStatsMessageId,
+    ticketLogChannelId: row.ticketLogChannelId,
   };
 }
 

@@ -1,9 +1,51 @@
 import type { Client, Message, TextChannel } from 'discord.js';
-import { EmbedBuilder } from 'discord.js';
+import { EmbedBuilder, ChannelType, PermissionFlagsBits } from 'discord.js';
 import type { Container } from '../container.js';
 import { EMBED_COLORS } from '../lib/embedColors.js';
+import { buildTicketEmbed, ticketActionButtons, updateStatsEmbed } from '../lib/ticketHelper.js';
 
 const xpCooldowns = new Map<string, number>();
+
+async function handleTicketOpen(message: Message, container: Container): Promise<boolean> {
+  const settings = await container.guildSettingsRepo.findByGuild(message.guildId!);
+  if (
+    !settings?.ticketChannelId ||
+    !settings.ticketCategoryId ||
+    message.channelId !== settings.ticketChannelId
+  ) {
+    return false;
+  }
+
+  await message.delete().catch(() => null);
+
+  const guild = message.guild!;
+  const ticketNum = await container.ticketService.nextTicketNumber(guild.id);
+  const safeName = message.author.username.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 16) || 'user';
+  const channelName = `ticket-${safeName}-${ticketNum}`;
+
+  const ticketChannel = await guild.channels.create({
+    name: channelName,
+    type: ChannelType.GuildText,
+    parent: settings.ticketCategoryId,
+    permissionOverwrites: [
+      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      { id: message.author.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+    ],
+  });
+
+  const subject = message.content.slice(0, 200) || null;
+  const ticket = await container.ticketService.openTicket(guild.id, message.author.id, ticketChannel.id, subject);
+
+  const embed = buildTicketEmbed(ticket, ticketNum);
+  await ticketChannel.send({
+    content: `<@${message.author.id}>`,
+    embeds: [embed],
+    components: [ticketActionButtons(ticket.id)],
+  });
+
+  await updateStatsEmbed(guild, container);
+  return true;
+}
 
 export function registerMessageCreateHandler(client: Client, container: Container): void {
   client.on('messageCreate', async (message: Message) => {
@@ -11,6 +53,8 @@ export function registerMessageCreateHandler(client: Client, container: Containe
 
     const guildId = message.guildId;
     const userId = message.author.id;
+
+    if (await handleTicketOpen(message, container)) return;
 
     const settings = await container.guildSettingsRepo.findByGuild(guildId);
     if (!(settings?.xpEnabled ?? true)) return;
