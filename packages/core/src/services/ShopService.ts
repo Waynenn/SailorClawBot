@@ -90,8 +90,6 @@ export class ShopService {
     if (!item) throw new NotFoundError('Item', itemId);
 
     const refund = item.price / 2n;
-    await this.inventory.removeItem(guildId, userId, itemId);
-
     const wallet = await this.wallets.findByGuildAndUser(guildId, userId);
     let newBalance = 0n;
     if (wallet && refund > 0n) {
@@ -101,6 +99,8 @@ export class ShopService {
     } else if (wallet) {
       newBalance = wallet.balance;
     }
+
+    await this.inventory.removeItem(guildId, userId, itemId);
 
     this.logger.info('Item sold', { guildId, userId, itemId, refund: refund.toString() });
     return { balance: newBalance, item, refund };

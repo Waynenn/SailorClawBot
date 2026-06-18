@@ -45,11 +45,11 @@ async function resolveBlackjack(
 }
 
 async function handleBlackjackButton(interaction: ButtonInteraction, container: Container): Promise<void> {
-  // customId: bj_hit_bj_{userId} | bj_stand_bj_{userId} | bj_double_bj_{userId}
+  // customId: bj_hit_{userId} | bj_stand_{userId} | bj_double_{userId}
   const parts = interaction.customId.split('_');
   const action = parts[1];
-  const sessionId = parts.slice(2).join('_');
-  const userId = parts.slice(3).join('_');
+  const userId = parts[2];
+  const sessionId = `bj_${interaction.guildId!}_${userId}`;
 
   if (interaction.user.id !== userId) {
     await interaction.reply({ content: 'This is not your game!', ephemeral: true });
@@ -82,7 +82,7 @@ async function handleBlackjackButton(interaction: ButtonInteraction, container: 
     }
 
     const embed = buildBjEmbed(session, { hideDealer: true });
-    await interaction.update({ embeds: [embed], components: [bjButtons(sessionId, false)] });
+    await interaction.update({ embeds: [embed], components: [bjButtons(userId, false)] });
 
   } else if (action === 'stand') {
     dealerPlay(session);
@@ -107,11 +107,12 @@ async function handleShopButton(interaction: ButtonInteraction, container: Conta
   const parts = interaction.customId.split('_');
   const direction = parts[1];
   const currentPage = parseInt(parts[2] ?? '1', 10);
-  const newPage = direction === 'next' ? currentPage + 1 : currentPage - 1;
+  const rawPage = direction === 'next' ? currentPage + 1 : currentPage - 1;
   const guildId = interaction.guildId!;
 
   const allItems = await container.shopService.listItems(guildId);
   const totalPages = Math.max(1, Math.ceil(allItems.length / SHOP_PAGE_SIZE));
+  const newPage = Math.max(1, Math.min(rawPage, totalPages));
   const pageItems = allItems.slice((newPage - 1) * SHOP_PAGE_SIZE, newPage * SHOP_PAGE_SIZE);
 
   const embed = buildShopEmbed(pageItems, newPage, totalPages);

@@ -94,12 +94,12 @@ export function buildBjEmbed(
     .setFooter({ text: opts.footer ?? 'Hit, Stand, or Double Down' });
 }
 
-export function bjButtons(sessionId: string, canDouble: boolean): ActionRowBuilder<ButtonBuilder> {
+export function bjButtons(userId: string, canDouble: boolean): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`bj_hit_${sessionId}`).setLabel('Hit').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`bj_stand_${sessionId}`).setLabel('Stand').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`bj_hit_${userId}`).setLabel('Hit').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`bj_stand_${userId}`).setLabel('Stand').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(`bj_double_${sessionId}`)
+      .setCustomId(`bj_double_${userId}`)
       .setLabel('Double Down')
       .setStyle(ButtonStyle.Danger)
       .setDisabled(!canDouble),
@@ -136,7 +136,7 @@ export const blackjackCommand: Command = {
         return;
       }
 
-      const sessionKey = `bj_${userId}`;
+      const sessionKey = `bj_${guildId}_${userId}`;
       if (bjSessions.has(sessionKey)) {
         await interaction.editReply('You already have an active blackjack game! Finish it first.');
         return;
@@ -187,7 +187,7 @@ export const blackjackCommand: Command = {
       bjSessions.set(session.id, session);
       const canDouble = wallet.balance - amount >= amount;
       const embed = buildBjEmbed(session, { hideDealer: true });
-      await interaction.editReply({ embeds: [embed], components: [bjButtons(session.id, canDouble)] });
+      await interaction.editReply({ embeds: [embed], components: [bjButtons(userId, canDouble)] });
 
     } catch (error) {
       await handleCommandError(error, interaction);
