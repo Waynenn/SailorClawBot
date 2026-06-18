@@ -134,4 +134,15 @@ export class TicketRepositoryImpl implements TicketRepository {
       translatePrismaError(error, 'rate ticket');
     }
   }
+
+  public async listClosedWithChannelBefore(date: Date): Promise<TicketDto[]> {
+    const rows = await this.db.ticket.findMany({
+      where: { status: 'closed', channelId: { not: null }, updatedAt: { lt: date } },
+    });
+    return rows.map(toTicketDto);
+  }
+
+  public async clearChannelId(id: string): Promise<void> {
+    await this.db.ticket.update({ where: { id }, data: { channelId: null } });
+  }
 }

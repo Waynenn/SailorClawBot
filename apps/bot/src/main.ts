@@ -18,6 +18,7 @@ import { coinflipCommand } from './commands/economy/coinflip.js';
 import { slotsCommand } from './commands/economy/slots.js';
 import { rouletteCommand } from './commands/economy/roulette.js';
 import { blackjackCommand, startSessionCleaner } from './commands/economy/blackjack.js';
+import { startTicketCleaner } from './lib/ticketHelper.js';
 import { shopCommand } from './commands/economy/shop.js';
 import { buyCommand } from './commands/economy/buy.js';
 import { sellCommand } from './commands/economy/sell.js';
@@ -105,6 +106,7 @@ export async function startBot(): Promise<void> {
   }
 
   startSessionCleaner();
+  startTicketCleaner(client, container);
   await client.login(token);
 }
 

@@ -7,7 +7,7 @@ import {
 } from 'discord.js';
 import type { Command } from '../index.js';
 import type { Container } from '../../container.js';
-import { buildStatsEmbed, updateStatsEmbed } from '../../lib/ticketHelper.js';
+import { buildStatsEmbed, updateStatsEmbed, lockTicketChannel } from '../../lib/ticketHelper.js';
 import { handleCommandError } from '../../middleware/errorHandler.js';
 
 export const ticketCommand: Command = {
@@ -84,13 +84,10 @@ export const ticketCommand: Command = {
 
         const reason = interaction.options.getString('reason');
         await container.ticketService.closeTicketByUser(ticket.id, interaction.user.id);
-        await interaction.editReply(`🔒 Ticket closed${reason ? ` — ${reason}` : ''}.`);
+        await interaction.editReply(`🔒 Ticket closed${reason ? ` — ${reason}` : ''}. Channel will be deleted in 7 days.`);
 
         if (guild) await updateStatsEmbed(guild, container);
-
-        setTimeout(async () => {
-          await (interaction.channel as TextChannel).delete().catch(() => null);
-        }, 5000);
+        await lockTicketChannel(interaction.channel as TextChannel);
         return;
       }
 

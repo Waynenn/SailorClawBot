@@ -1,4 +1,4 @@
-import type { Client, Interaction, ButtonInteraction } from 'discord.js';
+import type { Client, Interaction, ButtonInteraction, TextChannel } from 'discord.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import type { Command } from '../commands/index.js';
 import type { Container } from '../container.js';
@@ -13,7 +13,7 @@ import {
   type BlackjackSession,
 } from '../commands/economy/blackjack.js';
 import { buildShopEmbed, shopPageButtons, SHOP_PAGE_SIZE } from '../commands/economy/shop.js';
-import { buildTicketEmbed, ticketActionButtons, ratingButtons, updateStatsEmbed } from '../lib/ticketHelper.js';
+import { buildTicketEmbed, ticketActionButtons, ratingButtons, updateStatsEmbed, lockTicketChannel } from '../lib/ticketHelper.js';
 
 const PAGE_SIZE = 10;
 
@@ -175,19 +175,16 @@ async function handleTicketButton(interaction: ButtonInteraction, container: Con
   }
 
   if (action === 'close') {
-    const ticket = await container.ticketService.closeTicketByUser(ticketId, interaction.user.id);
+    await container.ticketService.closeTicketByUser(ticketId, interaction.user.id);
     if (interaction.guild) await updateStatsEmbed(interaction.guild, container);
 
     const ratingEmbed = new EmbedBuilder()
       .setColor(EMBED_COLORS.tickets)
       .setTitle('🔒 Ticket Closed')
-      .setDescription('Please rate your support experience:');
+      .setDescription('Please rate your support experience.\nThis channel will be deleted in 7 days.');
     await interaction.update({ embeds: [ratingEmbed], components: [ratingButtons(ticketId)] });
 
-    // Delete channel after 60s
-    setTimeout(async () => {
-      await interaction.channel?.delete().catch(() => null);
-    }, 60_000);
+    await lockTicketChannel(interaction.channel as TextChannel);
     return;
   }
 

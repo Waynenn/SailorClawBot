@@ -91,4 +91,12 @@ export class TicketService {
   public async nextTicketNumber(guildId: SnowflakeId): Promise<number> {
     return (await this.tickets.countAll(guildId)) + 1;
   }
+
+  public async listExpiredChannels(olderThan: Date): Promise<TicketDto[]> {
+    return this.tickets.listClosedWithChannelBefore(olderThan);
+  }
+
+  public async clearChannelId(id: string): Promise<void> {
+    return this.tickets.clearChannelId(id);
+  }
 }

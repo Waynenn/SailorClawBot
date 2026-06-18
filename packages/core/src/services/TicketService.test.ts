@@ -65,6 +65,8 @@ function createHarness(stored: TicketDto | null = null) {
       ticket = { ...ticket, rating };
       return ticket;
     },
+    listClosedWithChannelBefore: async () => (ticket?.status === 'closed' && ticket.channelId ? [ticket] : []),
+    clearChannelId: async () => { if (ticket) ticket = { ...ticket, channelId: null }; },
   };
 
   const bus: EventBus = { publish: async (e) => { events.push(e); } };

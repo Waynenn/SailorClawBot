@@ -17,4 +17,6 @@ export interface TicketRepository {
   close(id: string): Promise<TicketDto>;
   closeWithDetails(id: string, closedById: SnowflakeId): Promise<TicketDto>;
   setRating(id: string, rating: number): Promise<TicketDto>;
+  listClosedWithChannelBefore(date: Date): Promise<TicketDto[]>;
+  clearChannelId(id: string): Promise<void>;
 }

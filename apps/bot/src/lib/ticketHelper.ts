@@ -1,8 +1,10 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import type { Guild, TextChannel } from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
+import type { Client, Guild, TextChannel } from 'discord.js';
 import type { TicketDto, TicketStats } from '@sailorclawbot/contracts';
 import { EMBED_COLORS } from './embedColors.js';
 import type { Container } from '../container.js';
+
+const TICKET_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function buildTicketEmbed(ticket: TicketDto, ticketNum: number): EmbedBuilder {
   const embed = new EmbedBuilder()
@@ -57,6 +59,30 @@ export function buildStatsEmbed(stats: TicketStats): EmbedBuilder {
       { name: '✅ Closed', value: String(stats.closed), inline: true },
     )
     .setTimestamp();
+}
+
+export async function lockTicketChannel(channel: TextChannel): Promise<void> {
+  // Remove all custom overrides — admins bypass @everyone deny automatically via Discord's permission model
+  await channel.permissionOverwrites.set([
+    { id: channel.guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+  ]).catch(() => null);
+  const safeName = channel.name.replace(/^closed-/, '');
+  await channel.setName(`closed-${safeName}`).catch(() => null);
+}
+
+export function startTicketCleaner(client: Client, container: Container): void {
+  const run = async () => {
+    const cutoff = new Date(Date.now() - TICKET_RETENTION_MS);
+    const expired = await container.ticketService.listExpiredChannels(cutoff).catch(() => []);
+    for (const ticket of expired) {
+      if (!ticket.channelId) continue;
+      const ch = await client.channels.fetch(ticket.channelId).catch(() => null);
+      if (ch?.isDMBased() === false) await ch.delete().catch(() => null);
+      await container.ticketService.clearChannelId(ticket.id).catch(() => null);
+    }
+  };
+  run();
+  setInterval(run, 60 * 60 * 1000).unref();
 }
 
 export async function updateStatsEmbed(guild: Guild, container: Container): Promise<void> {
