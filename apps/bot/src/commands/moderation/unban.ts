@@ -9,7 +9,8 @@ export const unbanCommand: Command = {
   data: new SlashCommandBuilder()
     .setName('unban')
     .setDescription('Remove a ban from a user')
-    .addUserOption((o) => o.setName('user').setDescription('User to unban').setRequired(true)),
+    .addUserOption((o) => o.setName('user').setDescription('User to unban').setRequired(true))
+    .setDefaultMemberPermissions(0n),
 
   async execute(interaction: ChatInputCommandInteraction, container: Container): Promise<void> {
     await interaction.deferReply({ ephemeral: true });

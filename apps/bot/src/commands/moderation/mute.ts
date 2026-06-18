@@ -13,7 +13,8 @@ export const muteCommand: Command = {
     .addIntegerOption((o) =>
       o.setName('duration').setDescription('Duration in minutes').setRequired(true).setMinValue(1).setMaxValue(40320)
     )
-    .addStringOption((o) => o.setName('reason').setDescription('Reason for mute')),
+    .addStringOption((o) => o.setName('reason').setDescription('Reason for mute'))
+    .setDefaultMemberPermissions(0n),
 
   async execute(interaction: ChatInputCommandInteraction, container: Container): Promise<void> {
     await interaction.deferReply({ ephemeral: true });

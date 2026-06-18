@@ -10,6 +10,18 @@ import { kickCommand } from './commands/moderation/kick.js';
 import { casesCommand } from './commands/moderation/cases.js';
 import { balanceCommand } from './commands/economy/balance.js';
 import { transferCommand } from './commands/economy/transfer.js';
+import { dailyCommand } from './commands/economy/daily.js';
+import { workCommand } from './commands/economy/work.js';
+import { crimeCommand } from './commands/economy/crime.js';
+import { robCommand } from './commands/economy/rob.js';
+import { coinflipCommand } from './commands/economy/coinflip.js';
+import { slotsCommand } from './commands/economy/slots.js';
+import { rouletteCommand } from './commands/economy/roulette.js';
+import { blackjackCommand, startSessionCleaner } from './commands/economy/blackjack.js';
+import { shopCommand } from './commands/economy/shop.js';
+import { buyCommand } from './commands/economy/buy.js';
+import { sellCommand } from './commands/economy/sell.js';
+import { inventoryCommand } from './commands/economy/inventory.js';
 import { profileCommand } from './commands/profile/profile.js';
 import { rankCommand } from './commands/xp/rank.js';
 import { leaderboardCommand } from './commands/xp/leaderboard.js';
@@ -32,6 +44,18 @@ const ALL_COMMANDS: Command[] = [
   casesCommand,
   balanceCommand,
   transferCommand,
+  dailyCommand,
+  workCommand,
+  crimeCommand,
+  robCommand,
+  coinflipCommand,
+  slotsCommand,
+  rouletteCommand,
+  blackjackCommand,
+  shopCommand,
+  buyCommand,
+  sellCommand,
+  inventoryCommand,
   profileCommand,
   rankCommand,
   leaderboardCommand,
@@ -78,6 +102,7 @@ export async function startBot(): Promise<void> {
     logger.warn('TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET not set — Twitch notifications disabled');
   }
 
+  startSessionCleaner();
   await client.login(token);
 }
 

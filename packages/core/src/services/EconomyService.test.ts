@@ -1,18 +1,33 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { WalletRepository, TransactionRepository, WalletDto, TransactionDto } from '@sailorclawbot/contracts';
+import type { WalletRepository, TransactionRepository, WalletDto, TransactionDto, WalletCooldownUpdate } from '@sailorclawbot/contracts';
 import type { EventBus, DomainEvent } from '../common/events/EventBus.js';
 import type { Logger } from '../common/logging/Logger.js';
 import { EconomyService } from './EconomyService.js';
 import { ValidationError } from '../common/errors/ValidationError.js';
 import { NotFoundError } from '../common/errors/NotFoundError.js';
 import { ConflictError } from '../common/errors/ConflictError.js';
-
+import { CooldownError } from '../common/errors/CooldownError.js';
 
 const NOW = new Date('2024-01-01T00:00:00Z');
 
 function makeWallet(overrides: Partial<WalletDto> = {}): WalletDto {
-  return { id: 'wallet_1', guildId: 'g', userId: 'u', balance: 100n, createdAt: NOW, updatedAt: NOW, ...overrides };
+  return {
+    id: 'wallet_1',
+    guildId: 'g',
+    userId: 'u',
+    balance: 100n,
+    lastDailyAt: null,
+    lastWorkAt: null,
+    lastCrimeAt: null,
+    lastRobAt: null,
+    workUsesToday: 0,
+    crimeUsesToday: 0,
+    dailyLimitReset: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    ...overrides,
+  };
 }
 
 function createHarness(existingWallet: WalletDto | null = null) {
@@ -26,12 +41,17 @@ function createHarness(existingWallet: WalletDto | null = null) {
       wallet = makeWallet({ guildId: input.guildId, userId: input.userId, balance: 0n });
       return wallet;
     },
-    adjustBalance: async (walletId, amount) => {
+    adjustBalance: async (_walletId, amount) => {
       if (!wallet) throw new Error('no wallet');
       wallet = { ...wallet, balance: wallet.balance + amount };
       return wallet;
     },
     atomicTransfer: async () => { throw new Error('atomicTransfer not stubbed'); },
+    updateCooldowns: async (_walletId, data: WalletCooldownUpdate) => {
+      if (!wallet) throw new Error('no wallet');
+      wallet = { ...wallet, ...(data as Partial<WalletDto>) };
+      return wallet;
+    },
   };
 
   const transactions: TransactionRepository = {
@@ -48,6 +68,8 @@ function createHarness(existingWallet: WalletDto | null = null) {
 
   return { wallets, transactions, bus, logger, events, txs, getWallet: () => wallet };
 }
+
+// ─── ensureWallet ────────────────────────────────────────────────────────────
 
 test('ensureWallet — returns existing wallet', async () => {
   const existing = makeWallet();
@@ -69,8 +91,10 @@ test('ensureWallet — creates wallet and publishes event', async () => {
   assert.equal(events[0].name, 'wallet.created');
 });
 
+// ─── deposit ─────────────────────────────────────────────────────────────────
+
 test('deposit — adds balance and creates transaction', async () => {
-  const { wallets, transactions, bus, logger, txs, getWallet } = createHarness(makeWallet({ balance: 0n }));
+  const { wallets, transactions, bus, logger, txs } = createHarness(makeWallet({ balance: 0n }));
   const svc = new EconomyService(wallets, transactions, bus, logger);
 
   const result = await svc.deposit('g', 'u', 50n, 'gift');
@@ -86,6 +110,8 @@ test('deposit — rejects non-positive amount', async () => {
   await assert.rejects(() => svc.deposit('g', 'u', 0n, 'r'), (e) => { assert.ok(e instanceof ValidationError); return true; });
   await assert.rejects(() => svc.deposit('g', 'u', -1n, 'r'), (e) => { assert.ok(e instanceof ValidationError); return true; });
 });
+
+// ─── withdraw ────────────────────────────────────────────────────────────────
 
 test('withdraw — deducts balance and creates transaction', async () => {
   const { wallets, transactions, bus, logger, txs } = createHarness(makeWallet({ balance: 100n }));
@@ -110,6 +136,8 @@ test('withdraw — throws NotFoundError when no wallet', async () => {
   await assert.rejects(() => svc.withdraw('g', 'u', 10n, 'r'), (e) => { assert.ok(e instanceof NotFoundError); return true; });
 });
 
+// ─── transfer ────────────────────────────────────────────────────────────────
+
 test('transfer — moves funds between wallets', async () => {
   let walletA: WalletDto = makeWallet({ id: 'w_a', userId: 'u_a', balance: 100n });
   let walletB: WalletDto | null = null;
@@ -129,6 +157,7 @@ test('transfer — moves funds between wallets', async () => {
       walletB = { ...walletB, balance: walletB.balance + amount };
       return { from: walletA, to: walletB };
     },
+    updateCooldowns: async () => walletA,
   };
   const txs: TransactionDto[] = [];
   const transactions: TransactionRepository = {
@@ -154,6 +183,8 @@ test('transfer — rejects self-transfer', async () => {
   await assert.rejects(() => svc.transfer('g', 'u', 'u', 10n, 'r'), (e) => { assert.ok(e instanceof ValidationError); return true; });
 });
 
+// ─── getBalance ──────────────────────────────────────────────────────────────
+
 test('getBalance — returns wallet balance', async () => {
   const { wallets, transactions, bus, logger } = createHarness(makeWallet({ balance: 250n }));
   const svc = new EconomyService(wallets, transactions, bus, logger);
@@ -166,4 +197,248 @@ test('getBalance — throws NotFoundError when no wallet', async () => {
   const svc = new EconomyService(wallets, transactions, bus, logger);
 
   await assert.rejects(() => svc.getBalance('g', 'u'), (e) => { assert.ok(e instanceof NotFoundError); return true; });
+});
+
+// ─── claimDaily ──────────────────────────────────────────────────────────────
+
+test('claimDaily — awards daily amount and sets cooldown', async () => {
+  const { wallets, transactions, bus, logger, txs, getWallet } = createHarness(makeWallet({ balance: 0n }));
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  const { wallet, amount } = await svc.claimDaily('g', 'u', { dailyAmount: 100n });
+  assert.equal(amount, 100n);
+  assert.equal(wallet.balance, 100n);
+  assert.equal(txs.length, 1);
+  assert.ok(getWallet()?.lastDailyAt instanceof Date);
+});
+
+test('claimDaily — throws CooldownError within 24h', async () => {
+  const recentDaily = new Date(Date.now() - 10 * 60 * 1000);
+  const { wallets, transactions, bus, logger } = createHarness(makeWallet({ lastDailyAt: recentDaily }));
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  await assert.rejects(
+    () => svc.claimDaily('g', 'u', { dailyAmount: 100n }),
+    (e) => { assert.ok(e instanceof CooldownError); assert.ok(e.remainingMs > 0); return true; }
+  );
+});
+
+test('claimDaily — allows claim after 24h cooldown', async () => {
+  const oldDaily = new Date(Date.now() - 25 * 60 * 60 * 1000);
+  const { wallets, transactions, bus, logger } = createHarness(makeWallet({ balance: 50n, lastDailyAt: oldDaily }));
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  const { amount } = await svc.claimDaily('g', 'u', { dailyAmount: 100n });
+  assert.equal(amount, 100n);
+});
+
+// ─── work ────────────────────────────────────────────────────────────────────
+
+const WORK_SETTINGS = { workMin: 50n, workMax: 200n, dailyWorkLimit: 3, workDiminishingFactor: 0.5 };
+
+test('work — earns coins and sets cooldown', async () => {
+  const { wallets, transactions, bus, logger, txs } = createHarness(makeWallet({ balance: 0n }));
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  const { earned, usesToday } = await svc.work('g', 'u', WORK_SETTINGS);
+  assert.ok(earned >= 50n && earned <= 200n);
+  assert.equal(usesToday, 1);
+  assert.equal(txs.length, 1);
+});
+
+test('work — throws CooldownError within 1h', async () => {
+  const recentWork = new Date(Date.now() - 30 * 60 * 1000);
+  const { wallets, transactions, bus, logger } = createHarness(makeWallet({ lastWorkAt: recentWork }));
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  await assert.rejects(
+    () => svc.work('g', 'u', WORK_SETTINGS),
+    (e) => { assert.ok(e instanceof CooldownError); return true; }
+  );
+});
+
+test('work — throws ConflictError when daily limit reached', async () => {
+  const today = new Date();
+  const { wallets, transactions, bus, logger } = createHarness(
+    makeWallet({ workUsesToday: 3, dailyLimitReset: today })
+  );
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  await assert.rejects(
+    () => svc.work('g', 'u', WORK_SETTINGS),
+    (e) => { assert.ok(e instanceof ConflictError); assert.equal((e as ConflictError).code, 'DAILY_LIMIT_REACHED'); return true; }
+  );
+});
+
+// ─── crime ───────────────────────────────────────────────────────────────────
+
+const CRIME_SETTINGS = { crimeMin: 100n, crimeMax: 500n, dailyCrimeLimit: 2, crimeDiminishingFactor: 0.5 };
+
+test('crime — throws CooldownError within 2h', async () => {
+  const recentCrime = new Date(Date.now() - 60 * 60 * 1000);
+  const { wallets, transactions, bus, logger } = createHarness(makeWallet({ lastCrimeAt: recentCrime }));
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  await assert.rejects(
+    () => svc.crime('g', 'u', CRIME_SETTINGS),
+    (e) => { assert.ok(e instanceof CooldownError); return true; }
+  );
+});
+
+test('crime — throws ConflictError when daily crime limit reached', async () => {
+  const today = new Date();
+  const { wallets, transactions, bus, logger } = createHarness(
+    makeWallet({ crimeUsesToday: 2, dailyLimitReset: today })
+  );
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  await assert.rejects(
+    () => svc.crime('g', 'u', CRIME_SETTINGS),
+    (e) => { assert.ok(e instanceof ConflictError); assert.equal((e as ConflictError).code, 'DAILY_LIMIT_REACHED'); return true; }
+  );
+});
+
+test('crime — returns success or caught result', async () => {
+  const { wallets, transactions, bus, logger } = createHarness(makeWallet({ balance: 1000n }));
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  const result = await svc.crime('g', 'u', CRIME_SETTINGS);
+  assert.ok(typeof result.success === 'boolean');
+  assert.ok(result.amount >= 0n);
+});
+
+// ─── rob ─────────────────────────────────────────────────────────────────────
+
+test('rob — throws ValidationError when targeting self', async () => {
+  const { wallets, transactions, bus, logger } = createHarness(makeWallet());
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  await assert.rejects(
+    () => svc.rob('g', 'u', 'u', { robMinTargetBalance: 100n }),
+    (e) => { assert.ok(e instanceof ValidationError); return true; }
+  );
+});
+
+test('rob — throws CooldownError within 4h', async () => {
+  const recentRob = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  const { wallets, transactions, bus, logger } = createHarness(makeWallet({ lastRobAt: recentRob }));
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  await assert.rejects(
+    () => svc.rob('g', 'target', 'u', { robMinTargetBalance: 100n }),
+    (e) => { assert.ok(e instanceof CooldownError); return true; }
+  );
+});
+
+test('rob — throws ConflictError when target balance too low', async () => {
+  const targetWallet: WalletDto = makeWallet({ id: 'w_target', userId: 'target', balance: 10n });
+  const robberWallet = makeWallet({ id: 'w_robber', userId: 'robber', balance: 500n });
+
+  const wallets: WalletRepository = {
+    findByGuildAndUser: async (_, userId) => userId === 'robber' ? robberWallet : targetWallet,
+    create: async () => robberWallet,
+    adjustBalance: async () => robberWallet,
+    atomicTransfer: async () => { throw new Error('not called'); },
+    updateCooldowns: async () => robberWallet,
+  };
+  const transactions: TransactionRepository = {
+    create: async () => ({ id: 't1', walletId: 'w', amount: 0n, reason: '', createdAt: NOW }),
+    listByWallet: async () => [],
+  };
+  const bus: EventBus = { publish: async () => {} };
+  const logger: Logger = { info: () => {}, warn: () => {}, error: () => {} };
+
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+  await assert.rejects(
+    () => svc.rob('g', 'robber', 'target', { robMinTargetBalance: 100n }),
+    (e) => { assert.ok(e instanceof ConflictError); assert.equal((e as ConflictError).code, 'TARGET_BALANCE_TOO_LOW'); return true; }
+  );
+});
+
+// ─── coinflip ────────────────────────────────────────────────────────────────
+
+const GAMBLE = { gamblingMinBet: 10n, gamblingMaxBet: 10000n };
+
+test('coinflip — win or lose based on random result', async () => {
+  const { wallets, transactions, bus, logger } = createHarness(makeWallet({ balance: 1000n }));
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  const result = await svc.coinflip('g', 'u', 'heads', 100n, GAMBLE);
+  assert.ok(typeof result.won === 'boolean');
+  assert.ok(result.result === 'heads' || result.result === 'tails');
+});
+
+test('coinflip — throws ValidationError below min bet', async () => {
+  const { wallets, transactions, bus, logger } = createHarness(makeWallet({ balance: 1000n }));
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  await assert.rejects(
+    () => svc.coinflip('g', 'u', 'heads', 1n, GAMBLE),
+    (e) => { assert.ok(e instanceof ValidationError); return true; }
+  );
+});
+
+test('coinflip — throws ConflictError on insufficient balance', async () => {
+  const { wallets, transactions, bus, logger } = createHarness(makeWallet({ balance: 5n }));
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  await assert.rejects(
+    () => svc.coinflip('g', 'u', 'heads', 100n, GAMBLE),
+    (e) => { assert.ok(e instanceof ConflictError); return true; }
+  );
+});
+
+// ─── slots ───────────────────────────────────────────────────────────────────
+
+test('slots — returns 3 reels and win/lose result', async () => {
+  const { wallets, transactions, bus, logger } = createHarness(makeWallet({ balance: 1000n }));
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  const result = await svc.slots('g', 'u', 50n, GAMBLE);
+  assert.equal(result.reels.length, 3);
+  assert.ok(typeof result.won === 'boolean');
+  assert.ok(result.multiplier >= 0);
+});
+
+test('slots — throws ValidationError on invalid bet amount', async () => {
+  const { wallets, transactions, bus, logger } = createHarness(makeWallet({ balance: 1000n }));
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  await assert.rejects(
+    () => svc.slots('g', 'u', 1n, GAMBLE),
+    (e) => { assert.ok(e instanceof ValidationError); return true; }
+  );
+});
+
+// ─── roulette ────────────────────────────────────────────────────────────────
+
+test('roulette — accepts red/black/even/odd bets', async () => {
+  for (const bet of ['red', 'black', 'even', 'odd']) {
+    const w = makeWallet({ id: `w_${bet}`, balance: 10000n });
+    const h = createHarness(w);
+    const s = new EconomyService(h.wallets, h.transactions, h.bus, h.logger);
+    const result = await s.roulette('g', 'u', bet, 100n, GAMBLE);
+    assert.ok(typeof result.won === 'boolean');
+    assert.ok(result.number >= 0 && result.number <= 36);
+  }
+});
+
+test('roulette — accepts number bets 0-36', async () => {
+  const w = makeWallet({ balance: 10000n });
+  const { wallets, transactions, bus, logger } = createHarness(w);
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  const result = await svc.roulette('g', 'u', '17', 10n, GAMBLE);
+  assert.ok(typeof result.won === 'boolean');
+  assert.equal(result.multiplier, result.won ? 36 : 0);
+});
+
+test('roulette — throws ValidationError on invalid bet type', async () => {
+  const { wallets, transactions, bus, logger } = createHarness(makeWallet({ balance: 1000n }));
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  await assert.rejects(
+    () => svc.roulette('g', 'u', 'purple', 50n, GAMBLE),
+    (e) => { assert.ok(e instanceof ValidationError); return true; }
+  );
 });

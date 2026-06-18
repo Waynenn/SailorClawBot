@@ -18,12 +18,16 @@ import {
   FamilyRepositoryImpl,
   TwitchSubscriptionRepositoryImpl,
   XpMultiplierRepositoryImpl,
+  ItemRepositoryImpl,
+  InventoryItemRepositoryImpl,
 } from '@sailorclawbot/database';
 import {
   GuildService,
   ProfileService,
   ModerationService,
   EconomyService,
+  ShopService,
+  InventoryService,
   TicketService,
   FamilyService,
   PermissionService,
@@ -55,11 +59,15 @@ function buildContainer() {
   const xpMultiplierRepo = new XpMultiplierRepositoryImpl(prisma);
   const noXpTargetRepo = new NoXpTargetRepositoryImpl(prisma);
   const twitchSubRepo = new TwitchSubscriptionRepositoryImpl(prisma);
+  const itemRepo = new ItemRepositoryImpl(prisma);
+  const inventoryItemRepo = new InventoryItemRepositoryImpl(prisma);
 
   const guildService = new GuildService(guildRepo, guildMemberRepo, eventBus, logger);
   const profileService = new ProfileService(profileRepo, eventBus, logger);
   const moderationService = new ModerationService(warningRepo, muteRepo, banRepo, caseRepo, permissionRepo, eventBus, logger);
   const economyService = new EconomyService(walletRepo, transactionRepo, eventBus, logger);
+  const shopService = new ShopService(itemRepo, inventoryItemRepo, walletRepo, transactionRepo, eventBus, logger);
+  const inventoryService = new InventoryService(inventoryItemRepo, logger);
   const ticketService = new TicketService(ticketRepo, eventBus, logger);
   const familyService = new FamilyService(familyRepo, logger);
   const permissionService = new PermissionService(permissionRepo, roleMappingRepo);
@@ -73,6 +81,8 @@ function buildContainer() {
     profileService,
     moderationService,
     economyService,
+    shopService,
+    inventoryService,
     ticketService,
     familyService,
     permissionService,
@@ -82,6 +92,7 @@ function buildContainer() {
     xpMultiplierRepo,
     noXpTargetRepo,
     twitchSubRepo,
+    itemRepo,
   };
 }
 

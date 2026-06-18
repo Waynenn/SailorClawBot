@@ -10,7 +10,8 @@ export const kickCommand: Command = {
     .setName('kick')
     .setDescription('Kick a member from the server')
     .addUserOption((o) => o.setName('user').setDescription('Member to kick').setRequired(true))
-    .addStringOption((o) => o.setName('reason').setDescription('Reason for kick').setRequired(true)),
+    .addStringOption((o) => o.setName('reason').setDescription('Reason for kick').setRequired(true))
+    .setDefaultMemberPermissions(0n),
 
   async execute(interaction: ChatInputCommandInteraction, container: Container): Promise<void> {
     await interaction.deferReply({ ephemeral: true });

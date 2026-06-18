@@ -1,4 +1,4 @@
-import type { Warning, Mute, Ban, Case, PermissionOverride, Guild, GuildMember, Profile, LevelRole, XpMultiplier, NoXpTarget, GuildSettings, TwitchSubscription } from '@prisma/client';
+import type { Warning, Mute, Ban, Case, PermissionOverride, Guild, GuildMember, Profile, LevelRole, XpMultiplier, NoXpTarget, GuildSettings, TwitchSubscription, Wallet, Item, InventoryItem } from '@prisma/client';
 import type {
   WarningDto,
   MuteDto,
@@ -14,6 +14,9 @@ import type {
   NoXpTargetDto,
   GuildSettingsDto,
   TwitchSubscriptionDto,
+  WalletDto,
+  ItemDto,
+  InventoryItemDto,
 } from '@sailorclawbot/contracts';
 
 /**
@@ -162,6 +165,68 @@ export function toGuildSettingsDto(row: GuildSettings): GuildSettingsDto {
     levelUpDm: row.levelUpDm,
     levelUpMessage: row.levelUpMessage,
     locale: row.locale,
+    currencyName: row.currencyName,
+    currencyEmoji: row.currencyEmoji,
+    dailyAmount: row.dailyAmount,
+    startingBalance: row.startingBalance,
+    workMin: row.workMin,
+    workMax: row.workMax,
+    crimeMin: row.crimeMin,
+    crimeMax: row.crimeMax,
+    gamblingMinBet: row.gamblingMinBet,
+    gamblingMaxBet: row.gamblingMaxBet,
+    robMinTargetBalance: row.robMinTargetBalance,
+    transferTaxPercent: row.transferTaxPercent,
+    shopTaxPercent: row.shopTaxPercent,
+    dailyWorkLimit: row.dailyWorkLimit,
+    dailyCrimeLimit: row.dailyCrimeLimit,
+    workDiminishingFactor: row.workDiminishingFactor,
+    crimeDiminishingFactor: row.crimeDiminishingFactor,
+  };
+}
+
+export function toWalletDto(row: Wallet): WalletDto {
+  return {
+    id: row.id,
+    guildId: row.guildId,
+    userId: row.userId,
+    balance: row.balance,
+    lastDailyAt: row.lastDailyAt,
+    lastWorkAt: row.lastWorkAt,
+    lastCrimeAt: row.lastCrimeAt,
+    lastRobAt: row.lastRobAt,
+    workUsesToday: row.workUsesToday,
+    crimeUsesToday: row.crimeUsesToday,
+    dailyLimitReset: row.dailyLimitReset,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function toItemDto(row: Item): ItemDto {
+  return {
+    id: row.id,
+    guildId: row.guildId,
+    name: row.name,
+    description: row.description,
+    price: row.price,
+    emoji: row.emoji,
+    type: row.type,
+    effect: row.effect ?? null,
+    stock: row.stock,
+    createdAt: row.createdAt,
+  };
+}
+
+export function toInventoryItemDto(row: InventoryItem & { item?: Item }): InventoryItemDto {
+  return {
+    id: row.id,
+    guildId: row.guildId,
+    userId: row.userId,
+    itemId: row.itemId,
+    quantity: row.quantity,
+    acquiredAt: row.acquiredAt,
+    item: row.item ? toItemDto(row.item) : undefined,
   };
 }
 

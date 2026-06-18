@@ -9,7 +9,8 @@ export const unmuteCommand: Command = {
   data: new SlashCommandBuilder()
     .setName('unmute')
     .setDescription('Remove a mute from a member')
-    .addUserOption((o) => o.setName('user').setDescription('Member to unmute').setRequired(true)),
+    .addUserOption((o) => o.setName('user').setDescription('Member to unmute').setRequired(true))
+    .setDefaultMemberPermissions(0n),
 
   async execute(interaction: ChatInputCommandInteraction, container: Container): Promise<void> {
     await interaction.deferReply({ ephemeral: true });

@@ -10,7 +10,8 @@ export const warnCommand: Command = {
     .setName('warn')
     .setDescription('Issue a warning to a member')
     .addUserOption((o) => o.setName('user').setDescription('Member to warn').setRequired(true))
-    .addStringOption((o) => o.setName('reason').setDescription('Reason for warning').setRequired(true)),
+    .addStringOption((o) => o.setName('reason').setDescription('Reason for warning').setRequired(true))
+    .setDefaultMemberPermissions(0n),
 
   async execute(interaction: ChatInputCommandInteraction, container: Container): Promise<void> {
     await interaction.deferReply({ ephemeral: true });

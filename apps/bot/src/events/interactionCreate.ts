@@ -4,8 +4,120 @@ import type { Command } from '../commands/index.js';
 import type { Container } from '../container.js';
 import type { Logger } from '@sailorclawbot/core';
 import { EMBED_COLORS } from '../lib/embedColors.js';
+import {
+  bjSessions,
+  handValue,
+  dealerPlay,
+  buildBjEmbed,
+  bjButtons,
+  type BlackjackSession,
+} from '../commands/economy/blackjack.js';
+import { buildShopEmbed, shopPageButtons, SHOP_PAGE_SIZE } from '../commands/economy/shop.js';
 
 const PAGE_SIZE = 10;
+
+async function resolveBlackjack(
+  interaction: ButtonInteraction,
+  container: Container,
+  session: BlackjackSession,
+  guildId: string,
+): Promise<void> {
+  const playerVal = handValue(session.playerCards);
+  const dealerVal = handValue(session.dealerCards);
+  const { userId, bet } = session;
+  bjSessions.delete(session.id);
+
+  let footer: string;
+  if (playerVal > 21) {
+    footer = `Bust! Lost ${bet.toLocaleString()} coins.`;
+  } else if (dealerVal > 21 || playerVal > dealerVal) {
+    await container.economyService.deposit(guildId, userId, bet * 2n, 'Blackjack win');
+    footer = `You win! +${bet.toLocaleString()} coins.`;
+  } else if (playerVal === dealerVal) {
+    await container.economyService.deposit(guildId, userId, bet, 'Blackjack push');
+    footer = 'Push! Bet returned.';
+  } else {
+    footer = `Dealer wins. Lost ${bet.toLocaleString()} coins.`;
+  }
+
+  const embed = buildBjEmbed(session, { footer });
+  await interaction.update({ embeds: [embed], components: [] });
+}
+
+async function handleBlackjackButton(interaction: ButtonInteraction, container: Container): Promise<void> {
+  // customId: bj_hit_bj_{userId} | bj_stand_bj_{userId} | bj_double_bj_{userId}
+  const parts = interaction.customId.split('_');
+  const action = parts[1];
+  const sessionId = parts.slice(2).join('_');
+  const userId = parts.slice(3).join('_');
+
+  if (interaction.user.id !== userId) {
+    await interaction.reply({ content: 'This is not your game!', ephemeral: true });
+    return;
+  }
+
+  const session = bjSessions.get(sessionId);
+  if (!session) {
+    await interaction.update({ content: 'Session expired. Start a new game with `/blackjack`.', embeds: [], components: [] });
+    return;
+  }
+
+  const guildId = interaction.guildId!;
+
+  if (action === 'hit') {
+    session.playerCards.push(session.deck.pop()!);
+    const playerVal = handValue(session.playerCards);
+
+    if (playerVal > 21) {
+      bjSessions.delete(sessionId);
+      const embed = buildBjEmbed(session, { footer: `Bust! Lost ${session.bet.toLocaleString()} coins.` });
+      await interaction.update({ embeds: [embed], components: [] });
+      return;
+    }
+
+    if (playerVal === 21) {
+      dealerPlay(session);
+      await resolveBlackjack(interaction, container, session, guildId);
+      return;
+    }
+
+    const embed = buildBjEmbed(session, { hideDealer: true });
+    await interaction.update({ embeds: [embed], components: [bjButtons(sessionId, false)] });
+
+  } else if (action === 'stand') {
+    dealerPlay(session);
+    await resolveBlackjack(interaction, container, session, guildId);
+
+  } else if (action === 'double') {
+    const wallet = await container.economyService.ensureWallet(guildId, userId);
+    if (wallet.balance < session.bet) {
+      await interaction.reply({ content: `Insufficient balance to double down. Need **${session.bet.toLocaleString()} coins**.`, ephemeral: true });
+      return;
+    }
+    await container.economyService.withdraw(guildId, userId, session.bet, 'Blackjack double down');
+    session.bet *= 2n;
+    session.playerCards.push(session.deck.pop()!);
+    dealerPlay(session);
+    await resolveBlackjack(interaction, container, session, guildId);
+  }
+}
+
+async function handleShopButton(interaction: ButtonInteraction, container: Container): Promise<void> {
+  // customId: shop_prev_{page} | shop_next_{page}
+  const parts = interaction.customId.split('_');
+  const direction = parts[1];
+  const currentPage = parseInt(parts[2] ?? '1', 10);
+  const newPage = direction === 'next' ? currentPage + 1 : currentPage - 1;
+  const guildId = interaction.guildId!;
+
+  const allItems = await container.shopService.listItems(guildId);
+  const totalPages = Math.max(1, Math.ceil(allItems.length / SHOP_PAGE_SIZE));
+  const pageItems = allItems.slice((newPage - 1) * SHOP_PAGE_SIZE, newPage * SHOP_PAGE_SIZE);
+
+  const embed = buildShopEmbed(pageItems, newPage, totalPages);
+  const components = totalPages > 1 ? [shopPageButtons(newPage, totalPages)] : [];
+  await interaction.update({ embeds: [embed], components });
+}
 
 async function handleLeaderboardButton(interaction: ButtonInteraction, container: Container): Promise<void> {
   const [, direction, rawPage] = interaction.customId.split('_');
@@ -59,6 +171,10 @@ export function registerInteractionHandler(
       try {
         if (interaction.customId.startsWith('lb_')) {
           await handleLeaderboardButton(interaction, container);
+        } else if (interaction.customId.startsWith('bj_')) {
+          await handleBlackjackButton(interaction, container);
+        } else if (interaction.customId.startsWith('shop_')) {
+          await handleShopButton(interaction, container);
         }
       } catch (error) {
         logger.error('Button interaction error', { customId: interaction.customId, error: String(error) });

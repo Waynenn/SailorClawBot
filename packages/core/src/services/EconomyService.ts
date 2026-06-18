@@ -11,6 +11,65 @@ import type { Logger } from '../common/logging/Logger.js';
 import { ValidationError } from '../common/errors/ValidationError.js';
 import { NotFoundError } from '../common/errors/NotFoundError.js';
 import { ConflictError } from '../common/errors/ConflictError.js';
+import { CooldownError } from '../common/errors/CooldownError.js';
+
+// ─── Settings types ────────────────────────────────────────────────────────────
+
+export interface DailySettings { dailyAmount: bigint }
+export interface WorkSettings { workMin: bigint; workMax: bigint; dailyWorkLimit: number; workDiminishingFactor: number }
+export interface CrimeSettings { crimeMin: bigint; crimeMax: bigint; dailyCrimeLimit: number; crimeDiminishingFactor: number }
+export interface RobSettings { robMinTargetBalance: bigint }
+export interface GamblingSettings { gamblingMinBet: bigint; gamblingMaxBet: bigint }
+
+// ─── Result types ─────────────────────────────────────────────────────────────
+
+export interface DailyResult { wallet: WalletDto; amount: bigint }
+export interface WorkResult { wallet: WalletDto; earned: bigint; usesToday: number }
+export interface CrimeResult { wallet: WalletDto; amount: bigint; success: boolean }
+export interface RobResult { wallet: WalletDto; stolen: bigint; backfired: boolean; fined: bigint }
+export interface CoinflipResult { wallet: WalletDto; won: boolean; result: 'heads' | 'tails' }
+export interface SlotsResult { wallet: WalletDto; reels: string[]; multiplier: number; won: boolean; payout: bigint }
+export interface RouletteResult { wallet: WalletDto; number: number; color: 'red' | 'black' | 'green'; won: boolean; payout: bigint; multiplier: number }
+
+// ─── Slot helpers ─────────────────────────────────────────────────────────────
+
+const SLOT_PAYOUTS: Record<string, number> = {
+  '💎💎💎': 50,
+  '🔔🔔🔔': 10,
+  '🍇🍇🍇': 5,
+  '🍋🍋🍋': 3,
+  '🍒🍒🍒': 2,
+};
+
+function spinReel(): string {
+  const r = Math.floor(Math.random() * 15);
+  if (r < 5) return '🍒';
+  if (r < 9) return '🍋';
+  if (r < 12) return '🍇';
+  if (r < 14) return '🔔';
+  return '💎';
+}
+
+// ─── Roulette helpers ─────────────────────────────────────────────────────────
+
+const RED_NUMBERS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
+
+function getRouletteColor(num: number): 'red' | 'black' | 'green' {
+  if (num === 0) return 'green';
+  return RED_NUMBERS.has(num) ? 'red' : 'black';
+}
+
+// ─── Daily limit helpers ──────────────────────────────────────────────────────
+
+function isSameUtcDay(d1: Date, d2: Date): boolean {
+  return (
+    d1.getUTCFullYear() === d2.getUTCFullYear() &&
+    d1.getUTCMonth() === d2.getUTCMonth() &&
+    d1.getUTCDate() === d2.getUTCDate()
+  );
+}
+
+// ─── Service ──────────────────────────────────────────────────────────────────
 
 export class EconomyService {
   public constructor(
@@ -19,6 +78,8 @@ export class EconomyService {
     private readonly bus: EventBus,
     private readonly logger: Logger
   ) {}
+
+  // ── Existing core methods ────────────────────────────────────────────────────
 
   public async ensureWallet(guildId: SnowflakeId, userId: SnowflakeId): Promise<WalletDto> {
     const existing = await this.wallets.findByGuildAndUser(guildId, userId);
@@ -51,7 +112,6 @@ export class EconomyService {
 
     const wallet = await this.ensureWallet(guildId, userId);
     const updated = await this.wallets.adjustBalance(wallet.id, amount);
-
     await this.transactions.create({ walletId: wallet.id, amount, reason });
     this.logger.info('Deposit', { guildId, userId, amount: amount.toString() });
     await this.bus.publish({
@@ -73,9 +133,7 @@ export class EconomyService {
 
     const wallet = await this.wallets.findByGuildAndUser(guildId, userId);
     if (!wallet) throw new NotFoundError('Wallet', `${guildId}:${userId}`);
-    if (wallet.balance < amount) {
-      throw new ConflictError('Insufficient balance', 'INSUFFICIENT_BALANCE');
-    }
+    if (wallet.balance < amount) throw new ConflictError('Insufficient balance', 'INSUFFICIENT_BALANCE');
 
     const updated = await this.wallets.adjustBalance(wallet.id, -amount);
     await this.transactions.create({ walletId: wallet.id, amount: -amount, reason });
@@ -126,5 +184,304 @@ export class EconomyService {
     const wallet = await this.wallets.findByGuildAndUser(guildId, userId);
     if (!wallet) throw new NotFoundError('Wallet', `${guildId}:${userId}`);
     return this.transactions.listByWallet(wallet.id);
+  }
+
+  // ── Income commands ──────────────────────────────────────────────────────────
+
+  public async claimDaily(
+    guildId: SnowflakeId,
+    userId: SnowflakeId,
+    settings: DailySettings
+  ): Promise<DailyResult> {
+    const wallet = await this.ensureWallet(guildId, userId);
+
+    if (wallet.lastDailyAt) {
+      const cooldownMs = 24 * 60 * 60 * 1000;
+      const elapsed = Date.now() - wallet.lastDailyAt.getTime();
+      if (elapsed < cooldownMs) throw new CooldownError(cooldownMs - elapsed);
+    }
+
+    const now = new Date();
+    const updated = await this.wallets.adjustBalance(wallet.id, settings.dailyAmount);
+    await this.wallets.updateCooldowns(wallet.id, { lastDailyAt: now });
+    await this.transactions.create({ walletId: wallet.id, amount: settings.dailyAmount, reason: 'Daily reward' });
+
+    this.logger.info('Daily claimed', { guildId, userId, amount: settings.dailyAmount.toString() });
+    await this.bus.publish({
+      name: EventNames.EconomyDailyRewardClaimed,
+      payload: { guildId, userId, amount: settings.dailyAmount },
+      occurredAt: now,
+    });
+
+    return { wallet: updated, amount: settings.dailyAmount };
+  }
+
+  public async work(
+    guildId: SnowflakeId,
+    userId: SnowflakeId,
+    settings: WorkSettings
+  ): Promise<WorkResult> {
+    const wallet = await this.ensureWallet(guildId, userId);
+
+    if (wallet.lastWorkAt) {
+      const cooldownMs = 60 * 60 * 1000;
+      const elapsed = Date.now() - wallet.lastWorkAt.getTime();
+      if (elapsed < cooldownMs) throw new CooldownError(cooldownMs - elapsed);
+    }
+
+    const now = new Date();
+    const needsReset = !wallet.dailyLimitReset || !isSameUtcDay(wallet.dailyLimitReset, now);
+    const currentUses = needsReset ? 0 : wallet.workUsesToday;
+
+    if (currentUses >= settings.dailyWorkLimit) {
+      throw new ConflictError('Daily work limit reached', 'DAILY_LIMIT_REACHED');
+    }
+
+    const range = Number(settings.workMax - settings.workMin);
+    const base = settings.workMin + BigInt(Math.floor(Math.random() * range));
+    const diminish = Math.pow(settings.workDiminishingFactor, currentUses);
+    const earned = BigInt(Math.floor(Number(base) * diminish));
+
+    await this.wallets.updateCooldowns(wallet.id, {
+      lastWorkAt: now,
+      workUsesToday: currentUses + 1,
+      ...(needsReset ? { dailyLimitReset: now, crimeUsesToday: 0 } : {}),
+    });
+    const updated = await this.wallets.adjustBalance(wallet.id, earned);
+    await this.transactions.create({ walletId: wallet.id, amount: earned, reason: 'Work' });
+
+    return { wallet: updated, earned, usesToday: currentUses + 1 };
+  }
+
+  public async crime(
+    guildId: SnowflakeId,
+    userId: SnowflakeId,
+    settings: CrimeSettings
+  ): Promise<CrimeResult> {
+    const wallet = await this.ensureWallet(guildId, userId);
+
+    if (wallet.lastCrimeAt) {
+      const cooldownMs = 2 * 60 * 60 * 1000;
+      const elapsed = Date.now() - wallet.lastCrimeAt.getTime();
+      if (elapsed < cooldownMs) throw new CooldownError(cooldownMs - elapsed);
+    }
+
+    const now = new Date();
+    const needsReset = !wallet.dailyLimitReset || !isSameUtcDay(wallet.dailyLimitReset, now);
+    const currentUses = needsReset ? 0 : wallet.crimeUsesToday;
+
+    if (currentUses >= settings.dailyCrimeLimit) {
+      throw new ConflictError('Daily crime limit reached', 'DAILY_LIMIT_REACHED');
+    }
+
+    const success = Math.random() > 0.25;
+    let amount: bigint;
+
+    if (success) {
+      const range = Number(settings.crimeMax - settings.crimeMin);
+      const base = settings.crimeMin + BigInt(Math.floor(Math.random() * range));
+      const diminish = Math.pow(settings.crimeDiminishingFactor, currentUses);
+      amount = BigInt(Math.floor(Number(base) * diminish));
+    } else {
+      amount = wallet.balance < settings.crimeMin ? wallet.balance : settings.crimeMin;
+    }
+
+    // Set cooldown before balance change so a failed adjustBalance can't be retried
+    const afterCooldown = await this.wallets.updateCooldowns(wallet.id, {
+      lastCrimeAt: now,
+      crimeUsesToday: currentUses + 1,
+      ...(needsReset ? { dailyLimitReset: now, workUsesToday: 0 } : {}),
+    });
+
+    let updatedWallet = afterCooldown;
+    if (success) {
+      updatedWallet = await this.wallets.adjustBalance(wallet.id, amount);
+      await this.transactions.create({ walletId: wallet.id, amount, reason: 'Crime' });
+    } else if (amount > 0n) {
+      updatedWallet = await this.wallets.adjustBalance(wallet.id, -amount);
+      await this.transactions.create({ walletId: wallet.id, amount: -amount, reason: 'Crime fine' });
+    }
+
+    return { wallet: updatedWallet, amount, success };
+  }
+
+  public async rob(
+    guildId: SnowflakeId,
+    userId: SnowflakeId,
+    targetId: SnowflakeId,
+    settings: RobSettings
+  ): Promise<RobResult> {
+    if (userId === targetId) throw new ValidationError('Cannot rob yourself', 'targetId');
+
+    const [robberWallet, targetWallet] = await Promise.all([
+      this.ensureWallet(guildId, userId),
+      this.wallets.findByGuildAndUser(guildId, targetId),
+    ]);
+
+    if (robberWallet.lastRobAt) {
+      const cooldownMs = 4 * 60 * 60 * 1000;
+      const elapsed = Date.now() - robberWallet.lastRobAt.getTime();
+      if (elapsed < cooldownMs) throw new CooldownError(cooldownMs - elapsed);
+    }
+
+    if (!targetWallet) throw new NotFoundError('Wallet', `${guildId}:${targetId}`);
+    if (targetWallet.balance < settings.robMinTargetBalance) {
+      throw new ConflictError('Target has insufficient balance to rob', 'TARGET_BALANCE_TOO_LOW');
+    }
+
+    const backfired = Math.random() < 0.3;
+    let stolen = 0n;
+    let fined = 0n;
+
+    // Set cooldown before transfer — prevents retry if transfer succeeds but cooldown write fails
+    let updatedWallet = await this.wallets.updateCooldowns(robberWallet.id, { lastRobAt: new Date() });
+
+    if (backfired) {
+      const finePercent = 10 + Math.floor(Math.random() * 11);
+      fined = robberWallet.balance * BigInt(finePercent) / 100n;
+      if (fined > 0n) {
+        const { from } = await this.wallets.atomicTransfer(robberWallet.id, targetWallet.id, fined);
+        updatedWallet = from;
+        await Promise.allSettled([
+          this.transactions.create({ walletId: robberWallet.id, amount: -fined, reason: `Rob backfire (paid to ${targetId})` }),
+          this.transactions.create({ walletId: targetWallet.id, amount: fined, reason: `Rob backfire (received from ${userId})` }),
+        ]);
+      }
+    } else {
+      const stealPercent = 10 + Math.floor(Math.random() * 21);
+      stolen = targetWallet.balance * BigInt(stealPercent) / 100n;
+      if (stolen > 0n) {
+        const { to } = await this.wallets.atomicTransfer(targetWallet.id, robberWallet.id, stolen);
+        updatedWallet = to;
+        await Promise.allSettled([
+          this.transactions.create({ walletId: targetWallet.id, amount: -stolen, reason: `Robbed by ${userId}` }),
+          this.transactions.create({ walletId: robberWallet.id, amount: stolen, reason: `Robbed ${targetId}` }),
+        ]);
+      }
+    }
+
+    return { wallet: updatedWallet, stolen, backfired, fined };
+  }
+
+  // ── Gambling ─────────────────────────────────────────────────────────────────
+
+  public async coinflip(
+    guildId: SnowflakeId,
+    userId: SnowflakeId,
+    choice: 'heads' | 'tails',
+    amount: bigint,
+    settings: GamblingSettings
+  ): Promise<CoinflipResult> {
+    if (amount < settings.gamblingMinBet) {
+      throw new ValidationError(`Minimum bet is ${settings.gamblingMinBet}`, 'amount');
+    }
+    if (amount > settings.gamblingMaxBet) {
+      throw new ValidationError(`Maximum bet is ${settings.gamblingMaxBet}`, 'amount');
+    }
+
+    const wallet = await this.wallets.findByGuildAndUser(guildId, userId);
+    if (!wallet) throw new NotFoundError('Wallet', `${guildId}:${userId}`);
+    if (wallet.balance < amount) throw new ConflictError('Insufficient balance', 'INSUFFICIENT_BALANCE');
+
+    const result: 'heads' | 'tails' = Math.random() < 0.5 ? 'heads' : 'tails';
+    const won = result === choice;
+    const delta = won ? amount : -amount;
+
+    const updated = await this.wallets.adjustBalance(wallet.id, delta);
+    await this.transactions.create({
+      walletId: wallet.id,
+      amount: delta,
+      reason: won ? `Coinflip win (${choice})` : `Coinflip loss (chose ${choice}, got ${result})`,
+    });
+
+    return { wallet: updated, won, result };
+  }
+
+  public async slots(
+    guildId: SnowflakeId,
+    userId: SnowflakeId,
+    amount: bigint,
+    settings: GamblingSettings
+  ): Promise<SlotsResult> {
+    if (amount < settings.gamblingMinBet) {
+      throw new ValidationError(`Minimum bet is ${settings.gamblingMinBet}`, 'amount');
+    }
+    if (amount > settings.gamblingMaxBet) {
+      throw new ValidationError(`Maximum bet is ${settings.gamblingMaxBet}`, 'amount');
+    }
+
+    const wallet = await this.wallets.findByGuildAndUser(guildId, userId);
+    if (!wallet) throw new NotFoundError('Wallet', `${guildId}:${userId}`);
+    if (wallet.balance < amount) throw new ConflictError('Insufficient balance', 'INSUFFICIENT_BALANCE');
+
+    const reels = [spinReel(), spinReel(), spinReel()];
+    const key = reels.join('');
+    const multiplier = SLOT_PAYOUTS[key] ?? 0;
+    const payout = amount * BigInt(multiplier);
+    const net = multiplier > 0 ? payout - amount : -amount;
+
+    const updated = await this.wallets.adjustBalance(wallet.id, net);
+    await this.transactions.create({
+      walletId: wallet.id,
+      amount: net,
+      reason: multiplier > 0 ? `Slots win ${key} (${multiplier}x)` : `Slots loss ${key}`,
+    });
+
+    return { wallet: updated, reels, multiplier, won: multiplier > 0, payout };
+  }
+
+  public async roulette(
+    guildId: SnowflakeId,
+    userId: SnowflakeId,
+    bet: string,
+    amount: bigint,
+    settings: GamblingSettings
+  ): Promise<RouletteResult> {
+    if (amount < settings.gamblingMinBet) {
+      throw new ValidationError(`Minimum bet is ${settings.gamblingMinBet}`, 'amount');
+    }
+    if (amount > settings.gamblingMaxBet) {
+      throw new ValidationError(`Maximum bet is ${settings.gamblingMaxBet}`, 'amount');
+    }
+
+    const wallet = await this.wallets.findByGuildAndUser(guildId, userId);
+    if (!wallet) throw new NotFoundError('Wallet', `${guildId}:${userId}`);
+    if (wallet.balance < amount) throw new ConflictError('Insufficient balance', 'INSUFFICIENT_BALANCE');
+
+    const number = Math.floor(Math.random() * 37);
+    const color = getRouletteColor(number);
+
+    let won = false;
+    let multiplier = 0;
+
+    const lowerBet = bet.toLowerCase();
+    if (lowerBet === 'red' || lowerBet === 'black') {
+      won = color === lowerBet;
+      multiplier = won ? 2 : 0;
+    } else if (lowerBet === 'even' || lowerBet === 'odd') {
+      if (number !== 0) won = lowerBet === 'even' ? number % 2 === 0 : number % 2 !== 0;
+      multiplier = won ? 2 : 0;
+    } else {
+      const betNum = parseInt(lowerBet, 10);
+      if (isNaN(betNum) || betNum < 0 || betNum > 36) {
+        throw new ValidationError('Bet must be: red, black, even, odd, or a number 0–36', 'bet');
+      }
+      won = betNum === number;
+      multiplier = won ? 36 : 0;
+    }
+
+    const payout = amount * BigInt(multiplier);
+    const net = won ? payout - amount : -amount;
+
+    const updated = await this.wallets.adjustBalance(wallet.id, net);
+    await this.transactions.create({
+      walletId: wallet.id,
+      amount: net,
+      reason: won
+        ? `Roulette win on ${number} (${color}, bet: ${bet}, ${multiplier}x)`
+        : `Roulette loss (${number} ${color}, bet: ${bet})`,
+    });
+
+    return { wallet: updated, number, color, won, payout, multiplier };
   }
 }

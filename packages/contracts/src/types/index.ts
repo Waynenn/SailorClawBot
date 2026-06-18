@@ -12,6 +12,24 @@ export interface GuildSettingsDto {
   levelUpDm: boolean;
   levelUpMessage: string | null;
   locale: string;
+  // Economy
+  currencyName: string;
+  currencyEmoji: string;
+  dailyAmount: bigint;
+  startingBalance: bigint;
+  workMin: bigint;
+  workMax: bigint;
+  crimeMin: bigint;
+  crimeMax: bigint;
+  gamblingMinBet: bigint;
+  gamblingMaxBet: bigint;
+  robMinTargetBalance: bigint;
+  transferTaxPercent: number;
+  shopTaxPercent: number;
+  dailyWorkLimit: number;
+  dailyCrimeLimit: number;
+  workDiminishingFactor: number;
+  crimeDiminishingFactor: number;
 }
 
 export interface TwitchSubscriptionDto {
@@ -77,6 +95,13 @@ export interface WalletDto {
   guildId: SnowflakeId;
   userId: SnowflakeId;
   balance: bigint;
+  lastDailyAt: Date | null;
+  lastWorkAt: Date | null;
+  lastCrimeAt: Date | null;
+  lastRobAt: Date | null;
+  workUsesToday: number;
+  crimeUsesToday: number;
+  dailyLimitReset: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -87,6 +112,40 @@ export interface TransactionDto {
   amount: bigint;
   reason: string;
   createdAt: Date;
+}
+
+export interface ItemDto {
+  id: string;
+  guildId: string;
+  name: string;
+  description: string | null;
+  price: bigint;
+  emoji: string | null;
+  type: string;
+  effect: unknown | null;
+  stock: number | null;
+  createdAt: Date;
+}
+
+export interface CreateItemDto {
+  guildId: string;
+  name: string;
+  description?: string | null;
+  price: bigint;
+  emoji?: string | null;
+  type: string;
+  effect?: unknown | null;
+  stock?: number | null;
+}
+
+export interface InventoryItemDto {
+  id: string;
+  guildId: string;
+  userId: string;
+  itemId: string;
+  quantity: number;
+  acquiredAt: Date;
+  item?: ItemDto;
 }
 
 export interface FamilyDto {

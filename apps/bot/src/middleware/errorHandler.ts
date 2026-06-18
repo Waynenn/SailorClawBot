@@ -4,7 +4,16 @@ import {
   NotFoundError,
   PermissionDeniedError,
   ConflictError,
+  CooldownError,
 } from '@sailorclawbot/core';
+
+function formatCooldown(ms: number): string {
+  const totalSeconds = Math.ceil(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
 
 export async function handleCommandError(
   error: unknown,
@@ -12,7 +21,9 @@ export async function handleCommandError(
 ): Promise<void> {
   let message: string;
 
-  if (error instanceof ValidationError) {
+  if (error instanceof CooldownError) {
+    message = `⏳ **Cooldown**: Please wait **${formatCooldown(error.remainingMs)}** before using this again.`;
+  } else if (error instanceof ValidationError) {
     message = `❌ **Invalid input**: ${error.message}`;
   } else if (error instanceof PermissionDeniedError) {
     message = `🚫 **Permission denied**: ${error.message}`;

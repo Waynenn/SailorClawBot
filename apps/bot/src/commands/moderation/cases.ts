@@ -19,7 +19,8 @@ export const casesCommand: Command = {
     .addUserOption((o) => o.setName('user').setDescription('Filter by user (omit for all recent cases)'))
     .addIntegerOption((o) =>
       o.setName('limit').setDescription('Number of cases to show (default 10, max 25)').setMinValue(1).setMaxValue(25)
-    ),
+    )
+    .setDefaultMemberPermissions(0n),
 
   async execute(interaction: ChatInputCommandInteraction, container: Container): Promise<void> {
     await interaction.deferReply({ ephemeral: true });

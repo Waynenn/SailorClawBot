@@ -1,18 +1,8 @@
 import type { PrismaClient } from '@prisma/client';
-import type { WalletRepository, WalletDto, SnowflakeId } from '@sailorclawbot/contracts';
+import type { WalletRepository, WalletCooldownUpdate, WalletDto, SnowflakeId } from '@sailorclawbot/contracts';
 import { ValidationError, ConflictError } from '@sailorclawbot/core';
 import { translatePrismaError } from './prisma-errors.js';
-
-function toWalletDto(row: { id: string; guildId: string; userId: string; balance: bigint; createdAt: Date; updatedAt: Date }): WalletDto {
-  return {
-    id: row.id,
-    guildId: row.guildId,
-    userId: row.userId,
-    balance: row.balance,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
-}
+import { toWalletDto } from './mappers.js';
 
 export class WalletRepositoryImpl implements WalletRepository {
   public constructor(private readonly db: PrismaClient) {}
@@ -83,5 +73,23 @@ export class WalletRepositoryImpl implements WalletRepository {
       ]);
       return { from: toWalletDto(updatedFrom), to: toWalletDto(updatedTo) };
     });
+  }
+
+  public async updateCooldowns(walletId: string, data: WalletCooldownUpdate): Promise<WalletDto> {
+    try {
+      const update: Record<string, unknown> = {};
+      if (data.lastDailyAt !== undefined) update.lastDailyAt = data.lastDailyAt;
+      if (data.lastWorkAt !== undefined) update.lastWorkAt = data.lastWorkAt;
+      if (data.lastCrimeAt !== undefined) update.lastCrimeAt = data.lastCrimeAt;
+      if (data.lastRobAt !== undefined) update.lastRobAt = data.lastRobAt;
+      if (data.workUsesToday !== undefined) update.workUsesToday = data.workUsesToday;
+      if (data.crimeUsesToday !== undefined) update.crimeUsesToday = data.crimeUsesToday;
+      if (data.dailyLimitReset !== undefined) update.dailyLimitReset = data.dailyLimitReset;
+
+      const row = await this.db.wallet.update({ where: { id: walletId }, data: update });
+      return toWalletDto(row);
+    } catch (error) {
+      translatePrismaError(error, 'update wallet cooldowns');
+    }
   }
 }

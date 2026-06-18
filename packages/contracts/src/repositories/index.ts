@@ -16,3 +16,5 @@ export * from './WalletRepository.js';
 export * from './RoleMappingRepository.js';
 export * from './WarningRepository.js';
 export * from './XpMultiplierRepository.js';
+export * from './ItemRepository.js';
+export * from './InventoryItemRepository.js';

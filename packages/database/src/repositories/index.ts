@@ -18,3 +18,5 @@ export * from './PermissionRepositoryImpl.js';
 export * from './RoleMappingRepositoryImpl.js';
 export * from './TwitchSubscriptionRepositoryImpl.js';
 export * from './XpMultiplierRepositoryImpl.js';
+export * from './ItemRepositoryImpl.js';
+export * from './InventoryItemRepositoryImpl.js';

@@ -13,7 +13,8 @@ export const banCommand: Command = {
     .addStringOption((o) => o.setName('reason').setDescription('Reason for ban').setRequired(true))
     .addIntegerOption((o) =>
       o.setName('duration').setDescription('Duration in days (omit for permanent)').setMinValue(1).setMaxValue(365)
-    ),
+    )
+    .setDefaultMemberPermissions(0n),
 
   async execute(interaction: ChatInputCommandInteraction, container: Container): Promise<void> {
     await interaction.deferReply({ ephemeral: true });
