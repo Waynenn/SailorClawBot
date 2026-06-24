@@ -1,4 +1,5 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits, TextChannel } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits } from 'discord.js';
+import type { GuildChannel } from 'discord.js';
 import type { Command } from '../index.js';
 import type { Container } from '../../container.js';
 
@@ -9,8 +10,12 @@ export const unlockCommand: Command = {
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels) as SlashCommandBuilder,
 
   async execute(interaction: ChatInputCommandInteraction, _container: Container): Promise<void> {
-    const channel = interaction.channel as TextChannel;
+    if (!interaction.channel?.isTextBased() || interaction.channel.isDMBased()) {
+      await interaction.reply({ content: 'This command can only be used in a server text channel.', ephemeral: true });
+      return;
+    }
+    const channel = interaction.channel as GuildChannel;
     await channel.permissionOverwrites.edit(interaction.guild!.roles.everyone, { SendMessages: null });
-    await interaction.reply('🔓 **Channel unlocked.**');
+    await interaction.reply({ content: '🔓 **Channel unlocked.**', ephemeral: true });
   },
 };

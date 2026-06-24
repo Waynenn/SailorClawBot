@@ -91,9 +91,13 @@ async function handleBlackjackButton(interaction: ButtonInteraction, container: 
     await resolveBlackjack(interaction, container, session, guildId);
 
   } else if (action === 'double') {
+    // Remove session before any await to prevent concurrent double-processing
+    bjSessions.delete(sessionId);
     const wallet = await container.economyService.ensureWallet(guildId, userId);
     if (wallet.balance < session.bet) {
-      await interaction.reply({ content: `Insufficient balance to double down. Need **${session.bet.toLocaleString()} coins**.`, ephemeral: true });
+      // Not enough to double — fall back to stand
+      dealerPlay(session);
+      await resolveBlackjack(interaction, container, session, guildId);
       return;
     }
     await container.economyService.withdraw(guildId, userId, session.bet, 'Blackjack double down');
@@ -125,7 +129,7 @@ async function handleShopButton(interaction: ButtonInteraction, container: Conta
 async function handleLeaderboardButton(interaction: ButtonInteraction, container: Container): Promise<void> {
   const [, direction, rawPage] = interaction.customId.split('_');
   const currentPage = parseInt(rawPage ?? '1', 10);
-  const newPage = direction === 'next' ? currentPage + 1 : currentPage - 1;
+  const newPage = Math.max(1, direction === 'next' ? currentPage + 1 : currentPage - 1);
 
   const guildId = interaction.guildId;
   if (!guildId) return;

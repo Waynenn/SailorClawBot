@@ -39,7 +39,7 @@ export const warnCommand: Command = {
         .setColor(EMBED_COLORS.punitive)
         .setTitle('⚠️ Member Warned')
         .addFields(
-          { name: 'User', value: `${target.tag} (${target.id})`, inline: true },
+          { name: 'User', value: `${target.username} (${target.id})`, inline: true },
           { name: 'Case', value: `#${warning.caseNumber}`, inline: true },
           { name: 'Reason', value: reason }
         )

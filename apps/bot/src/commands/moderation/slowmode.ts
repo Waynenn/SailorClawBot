@@ -13,6 +13,10 @@ export const slowmodeCommand: Command = {
 
   async execute(interaction: ChatInputCommandInteraction, _container: Container): Promise<void> {
     const seconds = interaction.options.getInteger('seconds', true);
+    if (!interaction.channel?.isTextBased() || interaction.channel.isDMBased()) {
+      await interaction.reply({ content: 'This command can only be used in a server text channel.', ephemeral: true });
+      return;
+    }
     await (interaction.channel as TextChannel).setRateLimitPerUser(seconds);
     const msg = seconds === 0 ? '✅ Slowmode disabled.' : `✅ Slowmode set to **${seconds}s**.`;
     await interaction.reply({ content: msg, ephemeral: true });

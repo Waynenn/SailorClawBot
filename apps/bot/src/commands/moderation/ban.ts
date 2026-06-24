@@ -50,7 +50,7 @@ export const banCommand: Command = {
         .setColor(EMBED_COLORS.punitive)
         .setTitle('🔨 Member Banned')
         .addFields(
-          { name: 'User', value: `${target.tag} (${target.id})`, inline: true },
+          { name: 'User', value: `${target.username} (${target.id})`, inline: true },
           { name: 'Duration', value: expiry, inline: true },
           { name: 'Case', value: `#${ban.caseNumber}`, inline: true },
           { name: 'Reason', value: reason }

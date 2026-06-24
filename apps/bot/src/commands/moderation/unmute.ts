@@ -41,7 +41,7 @@ export const unmuteCommand: Command = {
       const embed = new EmbedBuilder()
         .setColor(EMBED_COLORS.restorative)
         .setTitle('🔊 Member Unmuted')
-        .addFields({ name: 'User', value: `${target.tag} (${target.id})` })
+        .addFields({ name: 'User', value: `${target.username} (${target.id})` })
         .setTimestamp();
 
       await interaction.editReply({ embeds: [embed] });

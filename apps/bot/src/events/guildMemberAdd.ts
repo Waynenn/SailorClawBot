@@ -3,6 +3,8 @@ import { EmbedBuilder } from 'discord.js';
 import type { Container } from '../container.js';
 
 const joinTracker = new Map<string, number[]>();
+const raidAlertCooldown = new Map<string, number>();
+const RAID_ALERT_COOLDOWN_MS = 60_000;
 
 function trackJoin(guildId: string): number {
   const now = Date.now();
@@ -42,7 +44,10 @@ export function registerGuildMemberAddHandler(client: Client, container: Contain
     // Raid detection
     const joinsPerMin = trackJoin(guildId);
     if (settings.raidJoinsPerMinute > 0 && joinsPerMin >= settings.raidJoinsPerMinute) {
-      if (settings.logChannelId) {
+      const now = Date.now();
+      const lastAlert = raidAlertCooldown.get(guildId) ?? 0;
+      if (settings.logChannelId && now - lastAlert > RAID_ALERT_COOLDOWN_MS) {
+        raidAlertCooldown.set(guildId, now);
         await sendRaidAlert(member, settings.logChannelId, joinsPerMin);
       }
       if (settings.raidAutoLock && !settings.verificationEnabled) {

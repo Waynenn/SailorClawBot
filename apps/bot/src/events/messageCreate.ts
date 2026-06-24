@@ -123,21 +123,22 @@ export function registerMessageCreateHandler(client: Client, container: Containe
     const settings = await container.guildSettingsRepo.findByGuild(guildId);
     if (!(settings?.xpEnabled ?? true)) return;
 
-    // Check NoXp exclusions BEFORE consuming cooldown
-    const channelExcluded = await container.noXpTargetRepo.isExcluded(guildId, message.channelId);
-    if (channelExcluded) return;
-
-    const memberRoleIds = message.member?.roles.cache.map((r) => r.id) ?? [];
-    for (const roleId of memberRoleIds) {
-      if (await container.noXpTargetRepo.isExcluded(guildId, roleId)) return;
-    }
-
-    // Cooldown check + stamp (synchronous — no await between read and write)
+    // Stamp cooldown before any further awaits to prevent concurrent handlers granting XP twice.
+    // Restore previous stamp if the user turns out to be excluded (so cooldown is not consumed).
     const cooldownSecs = settings?.xpCooldown ?? 60;
     const key = `${guildId}:${userId}`;
     const now = Date.now();
-    if (now - (xpCooldowns.get(key) ?? 0) < cooldownSecs * 1000) return;
+    const prevStamp = xpCooldowns.get(key) ?? 0;
+    if (now - prevStamp < cooldownSecs * 1000) return;
     xpCooldowns.set(key, now);
+
+    const channelExcluded = await container.noXpTargetRepo.isExcluded(guildId, message.channelId);
+    if (channelExcluded) { xpCooldowns.set(key, prevStamp); return; }
+
+    const memberRoleIds = message.member?.roles.cache.map((r) => r.id) ?? [];
+    for (const roleId of memberRoleIds) {
+      if (await container.noXpTargetRepo.isExcluded(guildId, roleId)) { xpCooldowns.set(key, prevStamp); return; }
+    }
 
     // Compute XP multiplier (highest wins across channel + roles)
     let multiplier = 1.0;

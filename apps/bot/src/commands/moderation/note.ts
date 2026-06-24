@@ -13,6 +13,8 @@ export const noteCommand: Command = {
 
   async execute(interaction: ChatInputCommandInteraction, container: Container): Promise<void> {
     if (!interaction.guildId) return;
+    await interaction.deferReply({ ephemeral: true });
+
     const target = interaction.options.getUser('user', true);
     const text = interaction.options.getString('text', true);
 
@@ -29,6 +31,6 @@ export const noteCommand: Command = {
       .setDescription(`Note saved for **${target.username}**.`)
       .addFields({ name: 'Content', value: note.content })
       .setTimestamp(note.createdAt);
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.editReply({ embeds: [embed] });
   },
 };

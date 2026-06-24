@@ -175,8 +175,8 @@ export const blackjackCommand: Command = {
           const embed = buildBjEmbed(session, { footer: 'Push — both blackjack!' });
           await interaction.editReply({ embeds: [embed] });
         } else {
-          // Natural blackjack pays 3:2
-          const winnings = amount + amount / 2n;
+          // Natural blackjack pays 3:2: profit = 1.5x bet
+          const winnings = amount * 3n / 2n;
           await container.economyService.deposit(guildId, userId, amount + winnings, 'Blackjack! 3:2');
           const embed = buildBjEmbed(session, { footer: `Blackjack! You won +${winnings.toLocaleString()} coins!` });
           await interaction.editReply({ embeds: [embed] });

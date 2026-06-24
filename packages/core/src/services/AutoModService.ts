@@ -4,6 +4,17 @@ const URL_REGEX = /https?:\/\/([^\s/]+)/gi;
 const INVITE_REGEX = /discord(?:\.gg|\.com\/invite)\/([^\s/]+)/i;
 const MENTION_REGEX = /<@!?\d+>|@here|@everyone/g;
 
+const SPAM_TTL_MS = 5 * 60 * 1000;
+
+export function startAutoModCleanup(): void {
+  setInterval(() => {
+    const cutoff = Date.now() - SPAM_TTL_MS;
+    for (const [key, entry] of spamTracker) {
+      if (entry.windowStart < cutoff) spamTracker.delete(key);
+    }
+  }, 60_000).unref();
+}
+
 const spamTracker = new Map<string, { count: number; windowStart: number }>();
 
 export class AutoModService {
@@ -140,7 +151,8 @@ export class AutoModService {
     config: { patterns: string[]; action: string; duration?: number }
   ): AutoModResult | null {
     for (const pattern of config.patterns) {
-      const regex = new RegExp(pattern, 'i');
+      let regex: RegExp;
+      try { regex = new RegExp(pattern, 'i'); } catch { continue; }
       if (regex.test(content)) {
         const wordResult: AutoModResult = {
           ruleType: 'words',

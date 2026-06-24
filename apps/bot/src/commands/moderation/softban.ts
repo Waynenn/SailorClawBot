@@ -18,13 +18,18 @@ export const softbanCommand: Command = {
     await interaction.deferReply({ ephemeral: true });
 
     await interaction.guild!.members.ban(target.id, { reason, deleteMessageSeconds: 604800 });
-    await new Promise((r) => setTimeout(r, 1000));
-    await interaction.guild!.members.unban(target.id, 'Softban — automatic unban');
+    const unbanned = await interaction.guild!.members.unban(target.id, 'Softban — automatic unban')
+      .then(() => true).catch(() => false);
 
     const embed = new EmbedBuilder()
       .setColor(EMBED_COLORS.punitive)
       .setTitle('🔨 Softban')
       .setDescription(`**${target.username}** was softbanned.\nReason: ${reason}`);
+
+    if (!unbanned) {
+      embed.addFields({ name: '⚠️ Warning', value: 'Auto-unban failed — user may still be banned. Please unban manually.' });
+    }
+
     await interaction.editReply({ embeds: [embed] });
   },
 };

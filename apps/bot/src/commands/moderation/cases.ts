@@ -45,7 +45,7 @@ export const casesCommand: Command = {
 
       const embed = new EmbedBuilder()
         .setColor(EMBED_COLORS.info)
-        .setTitle(target ? `Cases for ${target.tag}` : 'Recent Cases')
+        .setTitle(target ? `Cases for ${target.username}` : 'Recent Cases')
         .setDescription(lines.join('\n\n'))
         .setFooter({ text: `Showing ${cases.length} case(s)` })
         .setTimestamp();

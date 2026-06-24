@@ -1,4 +1,5 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits, TextChannel } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits } from 'discord.js';
+import type { GuildTextBasedChannel } from 'discord.js';
 import type { Command } from '../index.js';
 import type { Container } from '../../container.js';
 
@@ -19,9 +20,14 @@ export const purgeCommand: Command = {
     const targetUser = interaction.options.getUser('user');
     const contains = interaction.options.getString('contains');
     const botsOnly = interaction.options.getBoolean('bots') ?? false;
-    const channel = interaction.channel as TextChannel;
 
     await interaction.deferReply({ ephemeral: true });
+
+    if (!interaction.channel?.isTextBased() || interaction.channel.isDMBased()) {
+      await interaction.editReply('This command can only be used in a server text channel.');
+      return;
+    }
+    const channel = interaction.channel as GuildTextBasedChannel;
 
     const fetched = await channel.messages.fetch({ limit: 100 });
     const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
