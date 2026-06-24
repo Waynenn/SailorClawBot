@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import { Client, GatewayIntentBits, Collection } from 'discord.js';
 import { getContainer } from './container.js';
 import type { Command } from './commands/index.js';
@@ -29,11 +30,19 @@ import { rankCommand } from './commands/xp/rank.js';
 import { leaderboardCommand } from './commands/xp/leaderboard.js';
 import { xpCommand } from './commands/xp/xp.js';
 import { twitchCommand } from './commands/twitch/twitch.js';
+import { automodCommand } from './commands/moderation/automod.js';
+import { purgeCommand } from './commands/moderation/purge.js';
+import { slowmodeCommand } from './commands/moderation/slowmode.js';
+import { lockdownCommand } from './commands/moderation/lockdown.js';
+import { unlockCommand } from './commands/moderation/unlock.js';
+import { softbanCommand } from './commands/moderation/softban.js';
+import { noteCommand } from './commands/moderation/note.js';
 import { registerReadyHandler } from './events/ready.js';
 import { registerGuildCreateHandler } from './events/guildCreate.js';
 import { registerGuildDeleteHandler } from './events/guildDelete.js';
 import { registerInteractionHandler } from './events/interactionCreate.js';
 import { registerMessageCreateHandler } from './events/messageCreate.js';
+import { registerGuildMemberAddHandler } from './events/guildMemberAdd.js';
 import { TwitchPoller } from './lib/TwitchPoller.js';
 
 const ALL_COMMANDS: Command[] = [
@@ -64,9 +73,23 @@ const ALL_COMMANDS: Command[] = [
   leaderboardCommand,
   xpCommand,
   twitchCommand,
+  automodCommand,
+  purgeCommand,
+  slowmodeCommand,
+  lockdownCommand,
+  unlockCommand,
+  softbanCommand,
+  noteCommand,
 ];
 
 export async function startBot(): Promise<void> {
+  if (process.env.SENTRY_DSN) {
+    Sentry.init({
+      dsn: process.env.SENTRY_DSN,
+      environment: process.env.NODE_ENV ?? 'production',
+    });
+  }
+
   const token = process.env.DISCORD_TOKEN;
   if (!token) throw new Error('DISCORD_TOKEN is not set');
 
@@ -93,6 +116,7 @@ export async function startBot(): Promise<void> {
   registerGuildDeleteHandler(client, logger);
   registerInteractionHandler(client, commands, container, logger);
   registerMessageCreateHandler(client, container);
+  registerGuildMemberAddHandler(client, container);
 
   // Twitch poller (only if credentials configured)
   const twitchClientId = process.env.TWITCH_CLIENT_ID;
@@ -112,6 +136,7 @@ export async function startBot(): Promise<void> {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   startBot().catch((err) => {
+    Sentry.captureException(err);
     console.error('Fatal error:', err);
     process.exit(1);
   });

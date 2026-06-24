@@ -18,3 +18,5 @@ export * from './WarningRepository.js';
 export * from './XpMultiplierRepository.js';
 export * from './ItemRepository.js';
 export * from './InventoryItemRepository.js';
+export type { AutoModRepository } from './AutoModRepository.js';
+export type { StaffNoteRepository } from './StaffNoteRepository.js';

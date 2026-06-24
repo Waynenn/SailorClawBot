@@ -20,3 +20,5 @@ export * from './TwitchSubscriptionRepositoryImpl.js';
 export * from './XpMultiplierRepositoryImpl.js';
 export * from './ItemRepositoryImpl.js';
 export * from './InventoryItemRepositoryImpl.js';
+export * from './AutoModRepositoryImpl.js';
+export * from './StaffNoteRepositoryImpl.js';

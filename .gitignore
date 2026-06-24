@@ -36,8 +36,11 @@ Thumbs.db
 npm-debug.log*
 .vscode/settings.json
 
-# Archive checkpoints
-archives/checkpoints/*.zip
+# Archives and AI session artifacts
+archives/
+.codex/
+AGENTS.md
+docs/superpowers/plans/
 
 # Stale nested duplicate — never stage its embedded git repo
 /SailorClawBot/

@@ -20,6 +20,8 @@ import {
   XpMultiplierRepositoryImpl,
   ItemRepositoryImpl,
   InventoryItemRepositoryImpl,
+  AutoModRepositoryImpl,
+  StaffNoteRepositoryImpl,
 } from '@sailorclawbot/database';
 import {
   GuildService,
@@ -32,6 +34,7 @@ import {
   FamilyService,
   PermissionService,
   XpService,
+  AutoModService,
 } from '@sailorclawbot/core';
 import { ConsoleLogger } from './lib/ConsoleLogger.js';
 import { InMemoryEventBus } from './lib/InMemoryEventBus.js';
@@ -61,10 +64,12 @@ function buildContainer() {
   const twitchSubRepo = new TwitchSubscriptionRepositoryImpl(prisma);
   const itemRepo = new ItemRepositoryImpl(prisma);
   const inventoryItemRepo = new InventoryItemRepositoryImpl(prisma);
+  const autoModRepo = new AutoModRepositoryImpl(prisma);
+  const staffNoteRepo = new StaffNoteRepositoryImpl(prisma);
 
   const guildService = new GuildService(guildRepo, guildMemberRepo, eventBus, logger);
   const profileService = new ProfileService(profileRepo, eventBus, logger);
-  const moderationService = new ModerationService(warningRepo, muteRepo, banRepo, caseRepo, permissionRepo, eventBus, logger);
+  const moderationService = new ModerationService(warningRepo, muteRepo, banRepo, caseRepo, permissionRepo, eventBus, logger, staffNoteRepo);
   const economyService = new EconomyService(walletRepo, transactionRepo, eventBus, logger);
   const shopService = new ShopService(itemRepo, inventoryItemRepo, walletRepo, transactionRepo, eventBus, logger);
   const inventoryService = new InventoryService(inventoryItemRepo, logger);
@@ -72,6 +77,7 @@ function buildContainer() {
   const familyService = new FamilyService(familyRepo, logger);
   const permissionService = new PermissionService(permissionRepo, roleMappingRepo);
   const xpService = new XpService(profileRepo, eventBus, logger);
+  const autoModService = new AutoModService();
 
   return {
     prisma,
@@ -93,6 +99,9 @@ function buildContainer() {
     noXpTargetRepo,
     twitchSubRepo,
     itemRepo,
+    autoModRepo,
+    autoModService,
+    staffNoteRepo,
   };
 }
 

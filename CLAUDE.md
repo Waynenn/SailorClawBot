@@ -14,7 +14,7 @@ D:\Code\SailorClawBot\
 │   └── database/     (@sailorclawbot/database)   — Prisma + репозитории
 ├── apps/
 │   ├── bot/          — Discord.js v14 (slash commands, embeds, buttons)
-│   ├── worker/       — очереди, задачи (placeholder)
+│   ├── worker/       — mute/ban expiry jobs (node-cron)
 │   └── dashboard/    — UI администратора (placeholder)
 ├── docs/             — архитектурная документация
 │   └── superpowers/specs/2026-06-14-bot-design.md — полный дизайн бота
@@ -28,18 +28,22 @@ contracts → core → database → bot → worker → dashboard
 ```
 Нарушать порядок и создавать циклы — запрещено.
 
-## Текущий статус (2026-06-14)
+## Текущий статус (2026-06-23)
 
 | Phase | Статус | Детали |
 |-------|--------|--------|
 | 0 | ✅ Done | Монорепо, Prisma, Docker, docs |
-| 1 | ✅ Done | 12 репо + 7 сервисов, 58 тестов |
-| 2 | ✅ Done | 10 slash команд, DI container |
+| 1 | ✅ Done | 13 репо + 7 сервисов, 58 тестов |
+| 2 | ✅ Done | 10 slash команд, DI container, event handlers |
 | 2.5 | ✅ Done | Mega-migration, RoleMapping, Discord API calls, /kick /cases, EmbedBuilder |
-| 3 | 🔜 NEXT | XP/Leveling — XpService, /rank, /leaderboard, messageCreate |
-| 4–13 | ⏳ | Economy ext, Tickets, AutoMod, ServerMgmt, Family, Dashboard, Achievements, i18n, Music |
+| 3 | ✅ Done | XpService, messageCreate, /rank /leaderboard /xp + Twitch поллер |
+| 4 | ✅ Done | Economy Extended: daily/work/crime/rob + gambling + shop/inventory (14 команд) |
+| 5 | ✅ Done | Tickets: Discord интеграция, кнопки, 7-дневное хранение, admin-only после закрытия |
+| 6 | 🔜 NEXT | AutoMod (6 правил) + Sentry + Anti-raid + /purge /slowmode /lockdown +3 |
+| 7–14 | ⏳ | Server Mgmt, Family, Dashboard, Achievements, i18n, Sharding, Music |
 
-**Тесты:** 58 pass (node --test, packages/core)  
+**Команд:** 28 slash-команд  
+**Тесты:** 58+ pass (node --test, packages/core)  
 **Build:** pnpm build — 0 ошибок
 
 ## Ключевые файлы
@@ -48,19 +52,26 @@ contracts → core → database → bot → worker → dashboard
 |------|-----------|
 | `packages/contracts/src/repositories/` | Интерфейсы репо: Guild, Profile, Wallet, Transaction, Family, Ticket, RoleMapping, Warning, Mute, Ban, Case, Permission |
 | `packages/contracts/src/types/index.ts` | SnowflakeId, все DTO |
-| `packages/contracts/src/events/EventNames.ts` | Enum событий (включает moderation.kicked) |
-| `packages/core/src/services/` | GuildService, ProfileService, ModerationService, EconomyService, TicketService, FamilyService, PermissionService |
-| `packages/database/prisma/schema.prisma` | Полная Prisma-схема (все модели Phase 0–2.5) |
+| `packages/contracts/src/events/EventNames.ts` | Enum событий |
+| `packages/core/src/services/` | GuildService, ProfileService, ModerationService, EconomyService, TicketService, FamilyService, PermissionService, XpService |
+| `packages/database/prisma/schema.prisma` | Полная Prisma-схема (все модели) |
 | `packages/database/src/repositories/` | 13 реализаций репозиториев |
 | `apps/bot/src/container.ts` | DI-контейнер (все репо + сервисы) |
 | `apps/bot/src/main.ts` | Точка входа, ALL_COMMANDS, intents |
 | `apps/bot/src/commands/moderation/` | warn, mute, unmute, ban, unban, kick, cases |
-| `apps/bot/src/commands/economy/` | balance, transfer |
+| `apps/bot/src/commands/economy/` | balance, transfer, daily, work, crime, rob, coinflip, slots, blackjack, roulette |
+| `apps/bot/src/commands/shop/` | shop, buy, sell, inventory |
+| `apps/bot/src/commands/xp/` | rank, leaderboard, xp |
+| `apps/bot/src/commands/tickets/` | ticket (setup/close/add/remove) |
 | `apps/bot/src/commands/profile/` | profile |
+| `apps/bot/src/events/messageCreate.ts` | XP grants, ticket open, (Phase 6) AutoMod check |
+| `apps/bot/src/events/interactionCreate.ts` | Кнопки: ticket claim/close/rate, blackjack, verify |
 | `apps/bot/src/lib/embedColors.ts` | Цвета embed: punitive/restorative/info/economy/xp/tickets/family |
 | `apps/bot/src/middleware/errorHandler.ts` | Маппинг ошибок домена → embed |
-| `docs/REFINED_ROADMAP.md` | Детальный roadmap Phase 0–13 |
+| `apps/worker/src/jobs/` | ProcessMuteExpiry, ProcessBanExpiry (node-cron) |
+| `docs/REFINED_ROADMAP.md` | Детальный roadmap Phase 0–14 |
 | `docs/superpowers/specs/2026-06-14-bot-design.md` | Полный дизайн-спек (все домены) |
+| `docs/superpowers/plans/2026-06-23-phase6-automod.md` | Пошаговый план Phase 6 (10 задач) |
 
 ## БД-модели (Prisma / PostgreSQL)
 
@@ -72,7 +83,7 @@ contracts → core → database → bot → worker → dashboard
 - `Transaction` — транзакция кошелька
 
 **Settings & Permissions:**
-- `GuildSettings` — все настройки гильдии (tickets, welcome, XP, economy, starboard, logging, colors)
+- `GuildSettings` — все настройки гильдии (tickets, welcome, XP, economy, starboard, logging, verification, anti-raid)
 - `PermissionOverride` — per-user overrides
 - `RoleMapping` — Discord role → permission string (can_warn/can_mute/can_ban/can_kick/can_manage_tickets/can_manage_guild)
 
@@ -90,6 +101,7 @@ contracts → core → database → bot → worker → dashboard
 
 **Moderation:**
 - `Warning`, `Mute`, `Ban`, `Case`, `GuildCaseCounter`
+- `StaffNote` — приватные заметки стаффа (Phase 6)
 
 **Tickets:**
 - `Ticket` (TicketStatus: open/claimed/closed)
@@ -126,10 +138,9 @@ pnpm test         # запустить тесты (node --test)
 pnpm dev          # запустить в dev-режиме
 pnpm lint         # biome lint
 
-# Prisma
-cd packages/database
-pnpm prisma migrate dev
-pnpm prisma generate
+# Prisma (ВСЕГДА через скрипт, не напрямую)
+node scripts/run-prisma.mjs migrate dev
+node scripts/run-prisma.mjs generate
 ```
 
 ## Переменные окружения
@@ -138,6 +149,7 @@ pnpm prisma generate
 - `DATABASE_URL` — PostgreSQL connection string
 - `DISCORD_TOKEN` — токен бота
 - `DISCORD_CLIENT_ID` — ID приложения (для регистрации команд)
+- `SENTRY_DSN` — (Phase 6) Sentry endpoint, опционально
 
 ## Стиль кода
 

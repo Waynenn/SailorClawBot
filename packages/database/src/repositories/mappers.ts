@@ -157,6 +157,12 @@ export function toNoXpTargetDto(row: NoXpTarget): NoXpTargetDto {
 export function toGuildSettingsDto(row: GuildSettings): GuildSettingsDto {
   return {
     guildId: row.guildId,
+    welcomeChannelId: row.welcomeChannelId,
+    welcomeMessage: row.welcomeMessage,
+    leaveChannelId: row.leaveChannelId,
+    leaveMessage: row.leaveMessage,
+    welcomeDm: row.welcomeDm,
+    logChannelId: row.logChannelId,
     xpEnabled: row.xpEnabled,
     xpMin: row.xpMin,
     xpMax: row.xpMax,
@@ -186,6 +192,12 @@ export function toGuildSettingsDto(row: GuildSettings): GuildSettingsDto {
     ticketCategoryId: row.ticketCategoryId,
     ticketStatsMessageId: row.ticketStatsMessageId,
     ticketLogChannelId: row.ticketLogChannelId,
+    verificationEnabled: row.verificationEnabled,
+    verificationMode: row.verificationMode,
+    verificationRoleId: row.verificationRoleId,
+    minAccountAgeDays: row.minAccountAgeDays,
+    raidJoinsPerMinute: row.raidJoinsPerMinute,
+    raidAutoLock: row.raidAutoLock,
   };
 }
 

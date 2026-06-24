@@ -4,10 +4,12 @@ import type {
   BanRepository,
   CaseRepository,
   PermissionRepository,
+  StaffNoteRepository,
   WarningDto,
   MuteDto,
   BanDto,
   CaseDto,
+  StaffNoteDto,
   SnowflakeId,
 } from '@sailorclawbot/contracts';
 import type { EventBus } from '../common/events/EventBus.js';
@@ -32,7 +34,8 @@ export class ModerationService {
     private readonly cases: CaseRepository,
     private readonly permissions: PermissionRepository,
     private readonly eventBus: EventBus,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly staffNotes?: StaffNoteRepository
   ) {}
 
   // ==========================================================================
@@ -329,6 +332,36 @@ export class ModerationService {
       return this.cases.listByUser(guildId, userId, limit);
     }
     return this.cases.listByGuild(guildId, limit);
+  }
+
+  // ==========================================================================
+  // STAFF NOTES
+  // ==========================================================================
+
+  public async addNote(
+    guildId: SnowflakeId,
+    userId: SnowflakeId,
+    authorId: SnowflakeId,
+    content: string
+  ): Promise<StaffNoteDto> {
+    this.requireId(guildId, 'guildId');
+    this.requireId(userId, 'userId');
+    this.requireId(authorId, 'authorId');
+    if (!content || content.trim().length === 0) {
+      throw new ValidationError('Note content required', 'content');
+    }
+    if (!this.staffNotes) throw new ValidationError('StaffNoteRepository not configured', 'staffNotes');
+    return this.staffNotes.create({ guildId, userId, authorId, content });
+  }
+
+  public async getNotes(
+    guildId: SnowflakeId,
+    userId: SnowflakeId
+  ): Promise<StaffNoteDto[]> {
+    this.requireId(guildId, 'guildId');
+    this.requireId(userId, 'userId');
+    if (!this.staffNotes) return [];
+    return this.staffNotes.findByGuildAndUser(guildId, userId);
   }
 
   // ==========================================================================

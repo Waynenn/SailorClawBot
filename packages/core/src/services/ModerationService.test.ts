@@ -6,10 +6,12 @@ import type {
   BanRepository,
   CaseRepository,
   PermissionRepository,
+  StaffNoteRepository,
   WarningDto,
   MuteDto,
   BanDto,
   CaseDto,
+  StaffNoteDto,
   PermissionOverrideDto,
 } from '@sailorclawbot/contracts';
 import { ModerationService } from './ModerationService.js';
@@ -17,6 +19,20 @@ import type { EventBus, DomainEvent } from '../common/events/EventBus.js';
 import type { Logger } from '../common/logging/Logger.js';
 import { ValidationError } from '../common/errors/ValidationError.js';
 import { ConflictError } from '../common/errors/ConflictError.js';
+
+class InMemoryStaffNoteRepository implements StaffNoteRepository {
+  private readonly notes: StaffNoteDto[] = [];
+
+  async create(data: Omit<StaffNoteDto, 'id' | 'createdAt'>): Promise<StaffNoteDto> {
+    const note: StaffNoteDto = { id: `note_${this.notes.length + 1}`, createdAt: new Date(), ...data };
+    this.notes.push(note);
+    return note;
+  }
+
+  async findByGuildAndUser(guildId: string, userId: string): Promise<StaffNoteDto[]> {
+    return this.notes.filter((n) => n.guildId === guildId && n.userId === userId);
+  }
+}
 
 interface HarnessOptions {
   warningCount?: number;
@@ -28,6 +44,7 @@ interface HarnessOptions {
 function createHarness(opts: HarnessOptions = {}) {
   const events: DomainEvent[] = [];
   let caseSeq = 0;
+  const staffNoteRepo = new InMemoryStaffNoteRepository();
   const warningCreates: WarningDto[] = [];
   const muteCreates: MuteDto[] = [];
   const banCreates: BanDto[] = [];
@@ -139,10 +156,11 @@ function createHarness(opts: HarnessOptions = {}) {
     cases,
     permissions,
     eventBus,
-    logger
+    logger,
+    staffNoteRepo
   );
 
-  return { service, events, warningCreates, muteCreates, banCreates, caseCreates };
+  return { service, events, warningCreates, muteCreates, banCreates, caseCreates, staffNoteRepo };
 }
 
 const allowOverride: PermissionOverrideDto = {
@@ -313,4 +331,26 @@ test('unbanUser deactivates an active ban and emits moderation.unbanned', async 
 test('unbanUser throws ConflictError when user is not banned', async () => {
   const h = createHarness({ existingBan: null, permission: allowOverride });
   await assert.rejects(() => h.service.unbanUser('g1', 'u1', 'mod1'), ConflictError);
+});
+
+test('addNote saves a staff note and returns it', async () => {
+  const h = createHarness();
+  const note = await h.service.addNote('g1', 'u1', 'mod1', 'Suspicious behaviour');
+  assert.equal(note.guildId, 'g1');
+  assert.equal(note.userId, 'u1');
+  assert.equal(note.content, 'Suspicious behaviour');
+});
+
+test('addNote throws ValidationError when content is empty', async () => {
+  const h = createHarness();
+  await assert.rejects(() => h.service.addNote('g1', 'u1', 'mod1', '  '), { name: 'ValidationError' });
+});
+
+test('getNotes returns notes for a specific user', async () => {
+  const h = createHarness();
+  await h.service.addNote('g1', 'u2', 'mod1', 'First note');
+  await h.service.addNote('g1', 'u2', 'mod1', 'Second note');
+  const notes = await h.service.getNotes('g1', 'u2');
+  assert.ok(notes.length >= 2);
+  assert.ok(notes.every((n) => n.userId === 'u2'));
 });

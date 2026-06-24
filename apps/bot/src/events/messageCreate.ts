@@ -1,10 +1,58 @@
 import type { Client, Message, TextChannel } from 'discord.js';
 import { EmbedBuilder, ChannelType, PermissionFlagsBits } from 'discord.js';
+import type { AutoModResult } from '@sailorclawbot/contracts';
 import type { Container } from '../container.js';
 import { EMBED_COLORS } from '../lib/embedColors.js';
 import { buildTicketEmbed, ticketActionButtons, updateStatsEmbed } from '../lib/ticketHelper.js';
 
 const xpCooldowns = new Map<string, number>();
+
+async function executeAutoModAction(
+  message: Message,
+  result: AutoModResult,
+  container: import('../container.js').Container
+): Promise<void> {
+  const BOT_ID = message.client.user?.id ?? 'bot';
+  const guildId = message.guildId!;
+  const userId = message.author.id;
+  const reason = `AutoMod: ${result.ruleType} rule violation`;
+
+  await message.delete().catch(() => null);
+
+  try {
+    if (result.action === 'warn') {
+      await container.moderationService.warnUser(guildId, userId, reason, BOT_ID);
+    } else if (result.action === 'mute') {
+      const duration = result.durationMinutes ?? 5;
+      await container.moderationService.muteUser(guildId, userId, duration, BOT_ID, reason);
+      await message.member?.timeout(duration * 60_000, reason).catch(() => null);
+    } else if (result.action === 'kick') {
+      await message.member?.kick(reason).catch(() => null);
+    } else if (result.action === 'ban') {
+      await message.guild?.members.ban(userId, { reason, deleteMessageSeconds: 86400 }).catch(() => null);
+    }
+  } catch {
+    // ignore domain conflicts (e.g. already muted)
+  }
+
+  const settings = await container.guildSettingsRepo.findByGuild(guildId);
+  if (settings?.logChannelId) {
+    const logChannel = await message.guild?.channels.fetch(settings.logChannelId).catch(() => null);
+    if (logChannel?.isTextBased()) {
+      const embed = new EmbedBuilder()
+        .setColor(0xff4444)
+        .setTitle('🤖 AutoMod Action')
+        .addFields(
+          { name: 'User', value: `<@${userId}>`, inline: true },
+          { name: 'Rule', value: result.ruleType, inline: true },
+          { name: 'Action', value: result.action, inline: true },
+          { name: 'Content', value: message.content.slice(0, 300) || '(empty)' }
+        )
+        .setTimestamp();
+      await logChannel.send({ embeds: [embed] }).catch(() => null);
+    }
+  }
+}
 
 async function handleTicketOpen(message: Message, container: Container): Promise<boolean> {
   const settings = await container.guildSettingsRepo.findByGuild(message.guildId!);
@@ -55,6 +103,22 @@ export function registerMessageCreateHandler(client: Client, container: Containe
     const userId = message.author.id;
 
     if (await handleTicketOpen(message, container)) return;
+
+    // AutoMod check (before XP — violations should not grant XP)
+    const autoModRules = await container.autoModRepo.findAllByGuild(guildId);
+    if (autoModRules.length > 0) {
+      const result = container.autoModService.checkMessage(
+        message.content,
+        userId,
+        message.channelId,
+        guildId,
+        autoModRules
+      );
+      if (result) {
+        await executeAutoModAction(message, result, container);
+        return;
+      }
+    }
 
     const settings = await container.guildSettingsRepo.findByGuild(guildId);
     if (!(settings?.xpEnabled ?? true)) return;

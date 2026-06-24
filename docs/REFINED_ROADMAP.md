@@ -10,13 +10,13 @@
 | Phase | Focus | Status |
 |-------|-------|--------|
 | 0 | Monorepo, Prisma, Docker | ✅ DONE |
-| 1 | Core services + repos (41 tests) | ✅ DONE |
-| 2 | Discord.js bot foundation (8 commands) | ✅ DONE (partial — no Discord API calls yet) |
-| 2.5 | Schema mega-migration + Discord API fixes + RoleMapping + Worker infra + /kick /cases | 🔜 NEXT |
-| 3 | XP/Leveling vertical slice | ⏳ |
-| 4 | Economy extended (gambling, shop, inventory) | ⏳ |
-| 5 | Tickets full Discord integration | ⏳ |
-| 6 | Auto-moderation (6 rule types) | ⏳ |
+| 1 | Core services + repos (58 tests) | ✅ DONE |
+| 2 | Discord.js bot foundation (10 commands, DI container) | ✅ DONE |
+| 2.5 | Schema mega-migration + Discord API fixes + RoleMapping + /kick /cases | ✅ DONE |
+| 3 | XP/Leveling + Twitch poller | ✅ DONE |
+| 4 | Economy extended (gambling, shop, inventory) | ✅ DONE |
+| 5 | Tickets full Discord integration | ✅ DONE |
+| 6 | Auto-moderation (6 rule types) + Sentry + bulk-mod commands | 🔜 NEXT |
 | 7 | Server management (logging, welcome, reaction roles, giveaways, starboard) | ⏳ |
 | 8 | Family/Clan | ⏳ |
 | 9 | Admin Dashboard (Next.js + OAuth2) | ⏳ |

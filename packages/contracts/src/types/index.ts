@@ -4,6 +4,14 @@ export * from './moderation.js';
 
 export interface GuildSettingsDto {
   guildId: string;
+  // Welcome / Leave
+  welcomeChannelId: string | null;
+  welcomeMessage: string | null;
+  leaveChannelId: string | null;
+  leaveMessage: string | null;
+  welcomeDm: boolean;
+  // Logging
+  logChannelId: string | null;
   xpEnabled: boolean;
   xpMin: number;
   xpMax: number;
@@ -35,6 +43,13 @@ export interface GuildSettingsDto {
   ticketCategoryId: string | null;
   ticketStatsMessageId: string | null;
   ticketLogChannelId: string | null;
+  // Anti-raid & Verification
+  verificationEnabled: boolean;
+  verificationMode: string;
+  verificationRoleId: string | null;
+  minAccountAgeDays: number;
+  raidJoinsPerMinute: number;
+  raidAutoLock: boolean;
 }
 
 export interface TwitchSubscriptionDto {
@@ -175,4 +190,13 @@ export interface TicketDto {
   status: 'open' | 'claimed' | 'closed';
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface StaffNoteDto {
+  id: string;
+  guildId: string;
+  userId: string;
+  authorId: string;
+  content: string;
+  createdAt: Date;
 }

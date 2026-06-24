@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import type { Client, Interaction, ButtonInteraction, TextChannel } from 'discord.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import type { Command } from '../commands/index.js';
@@ -221,9 +222,19 @@ export function registerInteractionHandler(
           await handleShopButton(interaction, container);
         } else if (interaction.customId.startsWith('ticket_')) {
           await handleTicketButton(interaction, container);
+        } else if (interaction.customId.startsWith('verify_')) {
+          const settings = await container.guildSettingsRepo.findByGuild(interaction.guildId);
+          if (!settings?.verificationRoleId) {
+            await interaction.reply({ content: '⚠️ Verification role not configured.', ephemeral: true });
+            return;
+          }
+          const member = await interaction.guild?.members.fetch(interaction.user.id).catch(() => null);
+          await member?.roles.add(settings.verificationRoleId).catch(() => null);
+          await interaction.reply({ content: '✅ You have been verified!', ephemeral: true });
         }
       } catch (error) {
         logger.error('Button interaction error', { customId: interaction.customId, error: String(error) });
+        Sentry.captureException(error, { extra: { customId: interaction.customId } });
         await interaction.reply({ content: '💥 Ошибка при обработке кнопки.', ephemeral: true }).catch(() => null);
       }
       return;
@@ -242,6 +253,7 @@ export function registerInteractionHandler(
       await command.execute(interaction, container);
     } catch (error) {
       logger.error('Unhandled command error', { command: interaction.commandName, error: String(error) });
+      Sentry.captureException(error, { extra: { command: interaction.commandName } });
       const msg = '💥 An unexpected error occurred.';
       if (interaction.replied || interaction.deferred) {
         await interaction.editReply(msg);

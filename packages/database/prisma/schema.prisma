@@ -162,6 +162,14 @@ model GuildSettings {
   familyCreationMode     String  @default("coins") // "coins" | "item" | "both"
   familyCreationCost     BigInt  @default(5000)
   familyNameChangeCost   BigInt  @default(2000)
+
+  // Anti-raid & Verification
+  verificationEnabled    Boolean @default(false)
+  verificationMode       String  @default("button") // "button" | "reaction"
+  verificationRoleId     String?
+  minAccountAgeDays      Int     @default(0)
+  raidJoinsPerMinute     Int     @default(10)
+  raidAutoLock           Boolean @default(false)
 }
 
 // ============================================================================
@@ -362,6 +370,17 @@ model AutoModRule {
 
   @@unique([guildId, type])
   @@index([guildId])
+}
+
+model StaffNote {
+  id        String   @id @default(cuid())
+  guildId   String
+  userId    String
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([guildId, userId])
 }
 
 // ============================================================================
