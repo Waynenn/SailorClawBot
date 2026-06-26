@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/node';
-import { Client, GatewayIntentBits, Collection } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, Partials } from 'discord.js';
 import { getContainer } from './container.js';
 import type { Command } from './commands/index.js';
 import { warnCommand } from './commands/moderation/warn.js';
@@ -51,6 +51,7 @@ import { registerMessageCreateHandler } from './events/messageCreate.js';
 import { registerGuildMemberAddHandler } from './events/guildMemberAdd.js';
 import { registerGuildMemberRemoveHandler } from './events/guildMemberRemove.js';
 import { registerMessageReactionAddHandler } from './events/messageReactionAdd.js';
+import { registerMessageReactionRemoveHandler } from './events/messageReactionRemove.js';
 import { TwitchPoller } from './lib/TwitchPoller.js';
 
 const ALL_COMMANDS: Command[] = [
@@ -118,6 +119,7 @@ export async function startBot(): Promise<void> {
       GatewayIntentBits.MessageContent,
       GatewayIntentBits.GuildMessageReactions,
     ],
+    partials: [Partials.Message, Partials.Reaction, Partials.User],
   });
 
   const commands = new Collection<string, Command>();
@@ -133,6 +135,7 @@ export async function startBot(): Promise<void> {
   registerGuildMemberAddHandler(client, container);
   registerGuildMemberRemoveHandler(client, container);
   registerMessageReactionAddHandler(client, container);
+  registerMessageReactionRemoveHandler(client, container);
 
   // Twitch poller (only if credentials configured)
   const twitchClientId = process.env.TWITCH_CLIENT_ID;

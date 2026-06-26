@@ -1,12 +1,11 @@
-import { EmbedBuilder, type Client, type MessageReaction, type PartialMessageReaction, type User, type PartialUser } from 'discord.js';
+import { type Client, type MessageReaction, type PartialMessageReaction, type User, type PartialUser } from 'discord.js';
 import type { Container } from '../container.js';
-import { EMBED_COLORS } from '../lib/embedColors.js';
 
 function normalizeEmoji(reaction: MessageReaction | PartialMessageReaction): string {
   return reaction.emoji.id ?? reaction.emoji.name ?? '';
 }
 
-async function handleReactionRole(
+async function handleReactionRoleRemove(
   reaction: MessageReaction | PartialMessageReaction,
   user: User | PartialUser,
   container: Container
@@ -24,10 +23,10 @@ async function handleReactionRole(
   const member = await guild.members.fetch(user.id).catch(() => null);
   if (!member) return;
 
-  await member.roles.add(rr.roleId).catch(() => null);
+  await member.roles.remove(rr.roleId).catch(() => null);
 }
 
-async function handleStarboard(
+async function handleStarboardRemove(
   reaction: MessageReaction | PartialMessageReaction,
   container: Container
 ): Promise<void> {
@@ -51,30 +50,19 @@ async function handleStarboard(
     starCount,
     threshold,
     async () => {
-      const starboardChannel = await msg.guild?.channels.fetch(starboardChannelId).catch(() => null);
-      if (!starboardChannel?.isTextBased()) throw new Error('Starboard channel unavailable');
-
-      const embed = new EmbedBuilder()
-        .setColor(EMBED_COLORS.starboard)
-        .setAuthor({ name: full.author?.tag ?? 'Unknown', iconURL: full.author?.displayAvatarURL() })
-        .setDescription(full.content || null)
-        .addFields({ name: 'Source', value: `[Jump to message](${full.url})` })
-        .setTimestamp(full.createdAt);
-
-      if (full.attachments.first()) embed.setImage(full.attachments.first()!.url);
-
-      const sent = await starboardChannel.send({ content: `⭐ **${starCount}** <#${full.channelId}>`, embeds: [embed] });
-      return {
-        guildId,
-        originalMsgId: full.id,
-        starboardMsgId: sent.id,
-        authorId: full.author?.id ?? '',
-        channelId: full.channelId,
-      };
+      // Not expected on remove — create only fires when count first reaches threshold
+      throw new Error('buildEntry called unexpectedly during reaction remove');
     }
   ).catch(() => null);
 
-  if (result?.action === 'update' && result.entry) {
+  if (!result) return;
+
+  if (result.action === 'delete' && result.entry) {
+    const starboardChannel = await msg.guild?.channels.fetch(starboardChannelId).catch(() => null);
+    if (!starboardChannel?.isTextBased()) return;
+    const starboardMsg = await starboardChannel.messages.fetch(result.entry.starboardMsgId).catch(() => null);
+    await starboardMsg?.delete().catch(() => null);
+  } else if (result.action === 'update' && result.entry) {
     const starboardChannel = await msg.guild?.channels.fetch(starboardChannelId).catch(() => null);
     if (!starboardChannel?.isTextBased()) return;
     const starboardMsg = await starboardChannel.messages.fetch(result.entry.starboardMsgId).catch(() => null);
@@ -82,13 +70,13 @@ async function handleStarboard(
   }
 }
 
-export function registerMessageReactionAddHandler(client: Client, container: Container): void {
-  client.on('messageReactionAdd', async (reaction: MessageReaction | PartialMessageReaction, user: User | PartialUser) => {
+export function registerMessageReactionRemoveHandler(client: Client, container: Container): void {
+  client.on('messageReactionRemove', async (reaction: MessageReaction | PartialMessageReaction, user: User | PartialUser) => {
     if (user.bot) return;
 
     await Promise.all([
-      handleReactionRole(reaction, user, container),
-      handleStarboard(reaction, container),
+      handleReactionRoleRemove(reaction, user, container),
+      handleStarboardRemove(reaction, container),
     ]);
   });
 }

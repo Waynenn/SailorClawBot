@@ -2,6 +2,7 @@ import type { GiveawayRepository, GiveawayDto } from '@sailorclawbot/contracts';
 import type { Logger } from '../common/logging/Logger.js';
 import { NotFoundError } from '../common/errors/NotFoundError.js';
 import { ValidationError } from '../common/errors/ValidationError.js';
+import { ConflictError } from '../common/errors/ConflictError.js';
 
 export interface CreateGiveawayInput {
   guildId: string;
@@ -38,6 +39,7 @@ export class GiveawayService {
     if (!giveaway) throw new NotFoundError(`Giveaway ${id} not found`, 'Giveaway');
     if (giveaway.endedAt) throw new ValidationError('This giveaway has already ended', 'id');
     if (giveaway.endsAt < new Date()) throw new ValidationError('This giveaway has already ended', 'id');
+    if (giveaway.participants.includes(userId)) throw new ConflictError('Already entered this giveaway', 'userId');
     return this.repo.addParticipant(id, userId);
   }
 

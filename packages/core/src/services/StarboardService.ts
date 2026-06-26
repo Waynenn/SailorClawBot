@@ -28,13 +28,13 @@ export class StarboardService {
     originalMsgId: string,
     starCount: number,
     threshold: number,
-    buildEntry: () => Omit<StarboardEntryDto, 'id' | 'starCount'>
+    buildEntry: () => Promise<Omit<StarboardEntryDto, 'id' | 'starCount'>>
   ): Promise<StarboardResult> {
     const existing = await this.repo.findByOriginalMessage(guildId, originalMsgId);
 
     if (starCount >= threshold) {
       if (!existing) {
-        const input = buildEntry();
+        const input = await buildEntry();
         const entry = await this.repo.create({ ...input, starCount });
         this.logger.info('Starboard entry created', { guildId, originalMsgId });
         return { action: 'create', entry };
@@ -46,7 +46,8 @@ export class StarboardService {
     if (existing) {
       await this.repo.delete(guildId, originalMsgId);
       this.logger.info('Starboard entry deleted (below threshold)', { guildId, originalMsgId });
-      return { action: 'delete', entry: null };
+      // Return deleted entry so caller has starboardMsgId to remove the Discord message
+      return { action: 'delete', entry: existing };
     }
 
     return { action: 'none', entry: null };

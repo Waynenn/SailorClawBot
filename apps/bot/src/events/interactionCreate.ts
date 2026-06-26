@@ -4,6 +4,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'disc
 import type { Command } from '../commands/index.js';
 import type { Container } from '../container.js';
 import type { Logger } from '@sailorclawbot/core';
+import { ConflictError, ValidationError } from '@sailorclawbot/core';
 import { EMBED_COLORS } from '../lib/embedColors.js';
 import {
   bjSessions,
@@ -228,8 +229,18 @@ export function registerInteractionHandler(
           await handleTicketButton(interaction, container);
         } else if (interaction.customId.startsWith('giveaway_join_')) {
           const giveawayId = interaction.customId.replace('giveaway_join_', '');
-          await container.giveawayService.join(giveawayId, interaction.user.id);
-          await interaction.reply({ content: '🎉 You have entered the giveaway!', ephemeral: true });
+          try {
+            await container.giveawayService.join(giveawayId, interaction.user.id);
+            await interaction.reply({ content: '🎉 You have entered the giveaway!', ephemeral: true });
+          } catch (joinError) {
+            if (joinError instanceof ConflictError) {
+              await interaction.reply({ content: '⚠️ You are already in this giveaway!', ephemeral: true });
+            } else if (joinError instanceof ValidationError) {
+              await interaction.reply({ content: `❌ ${(joinError as Error).message}`, ephemeral: true });
+            } else {
+              throw joinError;
+            }
+          }
         } else if (interaction.customId.startsWith('verify_')) {
           const settings = await container.guildSettingsRepo.findByGuild(interaction.guildId);
           if (!settings?.verificationRoleId) {
