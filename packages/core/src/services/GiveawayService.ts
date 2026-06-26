@@ -3,6 +3,7 @@ import type { Logger } from '../common/logging/Logger.js';
 import { NotFoundError } from '../common/errors/NotFoundError.js';
 import { ValidationError } from '../common/errors/ValidationError.js';
 import { ConflictError } from '../common/errors/ConflictError.js';
+import { pickWinners } from '../common/giveaway/pickWinners.js';
 
 export interface CreateGiveawayInput {
   guildId: string;
@@ -47,7 +48,7 @@ export class GiveawayService {
     const giveaway = await this.repo.findById(id);
     if (!giveaway) throw new NotFoundError(`Giveaway ${id} not found`, 'Giveaway');
     if (giveaway.endedAt) throw new ValidationError('Already ended', 'id');
-    const winners = this.pickWinners(giveaway.participants, giveaway.winnersCount);
+    const winners = pickWinners(giveaway.participants, giveaway.winnersCount);
     const updated = await this.repo.end(id, winners);
     this.logger.info('Giveaway ended', { id, winners });
     return { giveaway: updated, winners };
@@ -57,25 +58,12 @@ export class GiveawayService {
     const giveaway = await this.repo.findById(id);
     if (!giveaway) throw new NotFoundError(`Giveaway ${id} not found`, 'Giveaway');
     if (!giveaway.endedAt) throw new ValidationError('Giveaway has not ended yet', 'id');
-    const winners = this.pickWinners(giveaway.participants, giveaway.winnersCount);
+    const winners = pickWinners(giveaway.participants, giveaway.winnersCount);
     const updated = await this.repo.end(id, winners);
     return { giveaway: updated, winners };
   }
 
   public async listActive(guildId: string): Promise<GiveawayDto[]> {
     return this.repo.findActive(guildId);
-  }
-
-  private pickWinners(participants: string[], count: number): string[] {
-    if (participants.length === 0) return [];
-    const pool = [...participants];
-    const winners: string[] = [];
-    const take = Math.min(count, pool.length);
-    for (let i = 0; i < take; i++) {
-      const idx = Math.floor(Math.random() * (pool.length - i));
-      winners.push(pool[idx]);
-      pool[idx] = pool[pool.length - 1 - i];
-    }
-    return winners;
   }
 }

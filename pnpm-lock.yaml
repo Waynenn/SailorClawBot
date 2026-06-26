@@ -45,7 +45,26 @@ importers:
 
   apps/dashboard: {}
 
-  apps/worker: {}
+  apps/worker:
+    dependencies:
+      '@prisma/client':
+        specifier: ^6.19.3
+        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      '@sailorclawbot/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@sailorclawbot/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@sailorclawbot/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@sentry/node':
+        specifier: ^10.59.0
+        version: 10.59.0
+      discord.js:
+        specifier: ^14.26.4
+        version: 14.26.4
 
   packages/cache:
     dependencies:

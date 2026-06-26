@@ -6,6 +6,7 @@ export * from './common/errors/ConflictError.js';
 export * from './common/errors/CooldownError.js';
 export * from './common/events/EventBus.js';
 export * from './common/logging/Logger.js';
+export * from './common/giveaway/pickWinners.js';
 export * from './services/ProfileService.js';
 export * from './services/GuildService.js';
 export * from './services/EconomyService.js';
