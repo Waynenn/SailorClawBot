@@ -142,10 +142,10 @@ export function registerMessageCreateHandler(client: Client, container: Containe
 
     // Compute XP multiplier (highest wins across channel + roles)
     let multiplier = 1.0;
-    const channelMult = await container.xpMultiplierRepo.findByTarget(guildId, message.channelId);
+    const channelMult = await container.xpMultiplierRepo.findByTarget(guildId, message.channelId, 'channel');
     if (channelMult) multiplier = channelMult.multiplier;
     for (const roleId of memberRoleIds) {
-      const roleMult = await container.xpMultiplierRepo.findByTarget(guildId, roleId);
+      const roleMult = await container.xpMultiplierRepo.findByTarget(guildId, roleId, 'role');
       if (roleMult && roleMult.multiplier > multiplier) multiplier = roleMult.multiplier;
     }
 

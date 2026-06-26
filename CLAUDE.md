@@ -28,7 +28,7 @@ contracts → core → database → bot → worker → dashboard
 ```
 Нарушать порядок и создавать циклы — запрещено.
 
-## Текущий статус (2026-06-23)
+## Текущий статус (2026-06-27)
 
 | Phase | Статус | Детали |
 |-------|--------|--------|
@@ -39,10 +39,11 @@ contracts → core → database → bot → worker → dashboard
 | 3 | ✅ Done | XpService, messageCreate, /rank /leaderboard /xp + Twitch поллер |
 | 4 | ✅ Done | Economy Extended: daily/work/crime/rob + gambling + shop/inventory (14 команд) |
 | 5 | ✅ Done | Tickets: Discord интеграция, кнопки, 7-дневное хранение, admin-only после закрытия |
-| 6 | 🔜 NEXT | AutoMod (6 правил) + Sentry + Anti-raid + /purge /slowmode /lockdown +3 |
-| 7–14 | ⏳ | Server Mgmt, Family, Dashboard, Achievements, i18n, Sharding, Music |
+| 6 | ✅ Done | AutoMod (6 правил) + Sentry + Anti-raid + /purge /slowmode /lockdown |
+| 7 | ✅ Done | 🌙 Server Mgmt: giveaway, starboard, reaction roles, welcome, logging |
+| 8–14 | ⏳ | Family, Dashboard, Achievements, i18n, Sharding, Music |
 
-**Команд:** 28 slash-команд  
+**Команд:** 35+ slash-команд  
 **Тесты:** 58+ pass (node --test, packages/core)  
 **Build:** pnpm build — 0 ошибок
 

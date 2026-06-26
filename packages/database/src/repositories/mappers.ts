@@ -1,4 +1,4 @@
-import type { Warning, Mute, Ban, Case, PermissionOverride, Guild, GuildMember, Profile, LevelRole, XpMultiplier, NoXpTarget, GuildSettings, TwitchSubscription, Wallet, Item, InventoryItem } from '@prisma/client';
+import type { Warning, Mute, Ban, Case, PermissionOverride, Guild, GuildMember, Profile, LevelRole, XpMultiplier, NoXpTarget, GuildSettings, TwitchSubscription, Wallet, Item, InventoryItem, ReactionRole, Giveaway, StarboardEntry } from '@prisma/client';
 import type {
   WarningDto,
   MuteDto,
@@ -17,6 +17,9 @@ import type {
   WalletDto,
   ItemDto,
   InventoryItemDto,
+  ReactionRoleDto,
+  GiveawayDto,
+  StarboardEntryDto,
 } from '@sailorclawbot/contracts';
 
 /**
@@ -198,6 +201,10 @@ export function toGuildSettingsDto(row: GuildSettings): GuildSettingsDto {
     minAccountAgeDays: row.minAccountAgeDays,
     raidJoinsPerMinute: row.raidJoinsPerMinute,
     raidAutoLock: row.raidAutoLock,
+    starboardEnabled: row.starboardEnabled,
+    starboardChannelId: row.starboardChannelId,
+    starboardThreshold: row.starboardThreshold,
+    logEvents: (row.logEvents as unknown as string[]) ?? [],
   };
 }
 
@@ -256,5 +263,44 @@ export function toTwitchSubscriptionDto(row: TwitchSubscription): TwitchSubscrip
     customMessage: row.customMessage,
     lastStreamId: row.lastStreamId,
     createdAt: row.createdAt,
+  };
+}
+
+export function toReactionRoleDto(row: ReactionRole): ReactionRoleDto {
+  return {
+    id: row.id,
+    guildId: row.guildId,
+    messageId: row.messageId,
+    channelId: row.channelId,
+    emoji: row.emoji,
+    roleId: row.roleId,
+  };
+}
+
+export function toGiveawayDto(row: Giveaway): GiveawayDto {
+  return {
+    id: row.id,
+    guildId: row.guildId,
+    channelId: row.channelId,
+    messageId: row.messageId,
+    prize: row.prize,
+    winnersCount: row.winnersCount,
+    endsAt: row.endsAt,
+    endedAt: row.endedAt,
+    hostId: row.hostId,
+    participants: (row.participants as unknown as string[]) ?? [],
+    winners: (row.winners as unknown as string[]) ?? [],
+  };
+}
+
+export function toStarboardEntryDto(row: StarboardEntry): StarboardEntryDto {
+  return {
+    id: row.id,
+    guildId: row.guildId,
+    originalMsgId: row.originalMsgId,
+    starboardMsgId: row.starboardMsgId,
+    authorId: row.authorId,
+    channelId: row.channelId,
+    starCount: row.starCount,
   };
 }

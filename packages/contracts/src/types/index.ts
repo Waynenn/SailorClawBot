@@ -50,6 +50,12 @@ export interface GuildSettingsDto {
   minAccountAgeDays: number;
   raidJoinsPerMinute: number;
   raidAutoLock: boolean;
+  // Starboard
+  starboardEnabled: boolean;
+  starboardChannelId: string | null;
+  starboardThreshold: number;
+  // Logging event filter
+  logEvents: string[];
 }
 
 export interface TwitchSubscriptionDto {
@@ -199,4 +205,37 @@ export interface StaffNoteDto {
   authorId: string;
   content: string;
   createdAt: Date;
+}
+
+export interface ReactionRoleDto {
+  id: string;
+  guildId: string;
+  messageId: string;
+  channelId: string;
+  emoji: string;
+  roleId: string;
+}
+
+export interface GiveawayDto {
+  id: string;
+  guildId: string;
+  channelId: string;
+  messageId: string | null;
+  prize: string;
+  winnersCount: number;
+  endsAt: Date;
+  endedAt: Date | null;
+  hostId: string;
+  participants: string[];
+  winners: string[];
+}
+
+export interface StarboardEntryDto {
+  id: string;
+  guildId: string;
+  originalMsgId: string;
+  starboardMsgId: string;
+  authorId: string;
+  channelId: string;
+  starCount: number;
 }

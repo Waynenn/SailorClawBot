@@ -110,6 +110,7 @@ export class ModerationService {
     this.requireId(guildId, 'guildId');
     this.requireId(userId, 'userId');
     this.requireId(moderatorId, 'moderatorId');
+    if (userId === moderatorId) throw new ValidationError('Cannot mute yourself', 'userId');
     if (durationMinutes <= 0) {
       throw new ValidationError('Duration must be positive', 'durationMinutes');
     }
@@ -196,6 +197,7 @@ export class ModerationService {
     this.requireId(guildId, 'guildId');
     this.requireId(userId, 'userId');
     this.requireId(moderatorId, 'moderatorId');
+    if (userId === moderatorId) throw new ValidationError('Cannot ban yourself', 'userId');
     if (!reason || reason.trim().length === 0) {
       throw new ValidationError('Reason required', 'reason');
     }

@@ -16,8 +16,13 @@ export const lockdownCommand: Command = {
       await interaction.reply({ content: 'This command can only be used in a server text channel.', ephemeral: true });
       return;
     }
+    await interaction.deferReply({ ephemeral: true });
     const channel = interaction.channel as GuildChannel;
-    await channel.permissionOverwrites.edit(interaction.guild!.roles.everyone, { SendMessages: false }, { reason });
-    await interaction.reply({ content: `🔒 **Locked down.** Reason: ${reason}`, ephemeral: true });
+    try {
+      await channel.permissionOverwrites.edit(interaction.guild!.roles.everyone, { SendMessages: false }, { reason });
+      await interaction.editReply({ content: `🔒 **Locked down.** Reason: ${reason}` });
+    } catch {
+      await interaction.editReply({ content: '❌ Failed to lock down — check my permissions.' });
+    }
   },
 };

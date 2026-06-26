@@ -146,3 +146,49 @@ describe('XpService.getRank', () => {
     await assert.rejects(() => svc.getRank('g1', 'u1'), /not found/i);
   });
 });
+
+// BUG-R10: grantXp while loop must handle multi-level-up in a single call.
+// Starting xp=0 level=0, granting 255 XP:
+//   pass level 0 (needs 100) → xp=155, level=1
+//   pass level 1 (needs 155) → xp=0, level=2
+//   level 2 needs 220 > 0 → stop. Result: level=2, leveled=true
+describe('XpService — multi-level regression', () => {
+  it('BUG-R10: grantXp advances multiple levels in one call', async () => {
+    const profile = makeProfile({ xp: 0, level: 0, totalXp: 0 });
+    let saved: { xp: number; level: number; totalXp: number } | null = null;
+    const repo: ProfileRepository = {
+      ...makeProfileRepo(profile),
+      updateXp: async (_g, _u, data) => {
+        saved = data;
+        return makeProfile(data);
+      },
+    };
+    const svc = new XpService(repo, noopBus, noopLogger);
+    const result = await svc.grantXp('g1', 'u1', 255);
+
+    assert.equal(result.leveled, true);
+    assert.equal(result.newLevel, 2);
+    assert.equal(saved!.level, 2);
+    assert.equal(saved!.xp, 0);
+    assert.equal(saved!.totalXp, 255);
+  });
+
+  // BUG-R11: setXp must correctly derive level for totalXp that spans multiple levels.
+  // totalXp=255 → level 0 (100) + level 1 (155) = 255 consumed → level=2, xp=0
+  it('BUG-R11: setXp recalculates across multiple levels', async () => {
+    let saved: { xp: number; level: number; totalXp: number } | null = null;
+    const repo: ProfileRepository = {
+      ...makeProfileRepo(),
+      updateXp: async (_g, _u, data) => {
+        saved = data;
+        return makeProfile(data);
+      },
+    };
+    const svc = new XpService(repo, noopBus, noopLogger);
+    await svc.setXp('g1', 'u1', 255);
+
+    assert.equal(saved!.level, 2);
+    assert.equal(saved!.xp, 0);
+    assert.equal(saved!.totalXp, 255);
+  });
+});

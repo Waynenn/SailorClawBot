@@ -17,8 +17,9 @@ export const slowmodeCommand: Command = {
       await interaction.reply({ content: 'This command can only be used in a server text channel.', ephemeral: true });
       return;
     }
+    await interaction.deferReply({ ephemeral: true });
     await (interaction.channel as TextChannel).setRateLimitPerUser(seconds);
     const msg = seconds === 0 ? '✅ Slowmode disabled.' : `✅ Slowmode set to **${seconds}s**.`;
-    await interaction.reply({ content: msg, ephemeral: true });
+    await interaction.editReply({ content: msg });
   },
 };

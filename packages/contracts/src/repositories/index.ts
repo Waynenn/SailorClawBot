@@ -20,3 +20,6 @@ export * from './ItemRepository.js';
 export * from './InventoryItemRepository.js';
 export type { AutoModRepository } from './AutoModRepository.js';
 export type { StaffNoteRepository } from './StaffNoteRepository.js';
+export type { ReactionRoleRepository } from './ReactionRoleRepository.js';
+export type { GiveawayRepository } from './GiveawayRepository.js';
+export type { StarboardEntryRepository } from './StarboardEntryRepository.js';

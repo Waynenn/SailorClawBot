@@ -38,12 +38,19 @@ import { lockdownCommand } from './commands/moderation/lockdown.js';
 import { unlockCommand } from './commands/moderation/unlock.js';
 import { softbanCommand } from './commands/moderation/softban.js';
 import { noteCommand } from './commands/moderation/note.js';
+import { welcomeCommand } from './commands/servermgmt/welcome.js';
+import { logCommand } from './commands/servermgmt/log.js';
+import { reactionroleCommand } from './commands/servermgmt/reactionrole.js';
+import { starboardCommand } from './commands/servermgmt/starboard.js';
+import { giveawayCommand } from './commands/servermgmt/giveaway.js';
 import { registerReadyHandler } from './events/ready.js';
 import { registerGuildCreateHandler } from './events/guildCreate.js';
 import { registerGuildDeleteHandler } from './events/guildDelete.js';
 import { registerInteractionHandler } from './events/interactionCreate.js';
 import { registerMessageCreateHandler } from './events/messageCreate.js';
 import { registerGuildMemberAddHandler } from './events/guildMemberAdd.js';
+import { registerGuildMemberRemoveHandler } from './events/guildMemberRemove.js';
+import { registerMessageReactionAddHandler } from './events/messageReactionAdd.js';
 import { TwitchPoller } from './lib/TwitchPoller.js';
 
 const ALL_COMMANDS: Command[] = [
@@ -81,6 +88,11 @@ const ALL_COMMANDS: Command[] = [
   unlockCommand,
   softbanCommand,
   noteCommand,
+  welcomeCommand,
+  logCommand,
+  reactionroleCommand,
+  starboardCommand,
+  giveawayCommand,
 ];
 
 export async function startBot(): Promise<void> {
@@ -104,6 +116,7 @@ export async function startBot(): Promise<void> {
       GatewayIntentBits.GuildModeration,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
+      GatewayIntentBits.GuildMessageReactions,
     ],
   });
 
@@ -118,6 +131,8 @@ export async function startBot(): Promise<void> {
   registerInteractionHandler(client, commands, container, logger);
   registerMessageCreateHandler(client, container);
   registerGuildMemberAddHandler(client, container);
+  registerGuildMemberRemoveHandler(client, container);
+  registerMessageReactionAddHandler(client, container);
 
   // Twitch poller (only if credentials configured)
   const twitchClientId = process.env.TWITCH_CLIENT_ID;

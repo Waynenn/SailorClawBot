@@ -6,4 +6,6 @@ export const EMBED_COLORS = {
   xp: 0x3498db,
   tickets: 0x1abc9c,
   family: 0x9b59b6,
+  giveaway: 0xff73fa,
+  starboard: 0xffd700,
 } as const;

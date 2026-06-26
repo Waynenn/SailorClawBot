@@ -442,3 +442,73 @@ test('roulette — throws ValidationError on invalid bet type', async () => {
     (e) => { assert.ok(e instanceof ValidationError); return true; }
   );
 });
+
+// BUG-R16: work() diminishing factor — when workUsesToday=1 and factor=0,
+// earned must be 0n (Math.pow(0,1)=0). Validates the diminish formula is applied.
+test('work — BUG-R16: diminishing factor of 0 produces 0 earnings on subsequent uses', async () => {
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  const { wallets, transactions, bus, logger } = createHarness(
+    makeWallet({ workUsesToday: 1, dailyLimitReset: new Date(), lastWorkAt: twoHoursAgo, balance: 0n })
+  );
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+
+  const { earned } = await svc.work('g', 'u', {
+    workMin: 100n, workMax: 200n, dailyWorkLimit: 3, workDiminishingFactor: 0,
+  });
+  assert.equal(earned, 0n);
+});
+
+// BUG-R17: rob() uses strict < for balance check — target balance exactly equal to
+// robMinTargetBalance must be allowed (not throw TARGET_BALANCE_TOO_LOW)
+test('rob — BUG-R17: target balance exactly at minimum is allowed (strict < boundary)', async () => {
+  const NOW_LOCAL = new Date('2024-01-01T00:00:00Z');
+  let robberWallet: WalletDto = makeWallet({ id: 'w_rob', userId: 'u_rob', balance: 1000n });
+  const targetWallet: WalletDto = makeWallet({ id: 'w_tgt', userId: 'u_tgt', balance: 100n });
+
+  const wallets: WalletRepository = {
+    findByGuildAndUser: async (_, userId) => userId === 'u_rob' ? robberWallet : targetWallet,
+    create: async () => robberWallet,
+    adjustBalance: async () => robberWallet,
+    atomicTransfer: async (_fromId, _toId, amount) => ({
+      from: { ...robberWallet, balance: robberWallet.balance - amount },
+      to: { ...targetWallet, balance: targetWallet.balance + amount },
+    }),
+    updateCooldowns: async () => { robberWallet = { ...robberWallet }; return robberWallet; },
+  };
+  const txs: TransactionDto[] = [];
+  const transactions: TransactionRepository = {
+    create: async (input) => { const tx: TransactionDto = { id: `t${txs.length + 1}`, createdAt: NOW_LOCAL, ...input }; txs.push(tx); return tx; },
+    listByWallet: async () => txs,
+  };
+  const bus: EventBus = { publish: async () => {} };
+  const logger: Logger = { info: () => {}, warn: () => {}, error: () => {} };
+
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+  // target balance (100n) === robMinTargetBalance (100n) → strict < is false → no throw
+  await assert.doesNotReject(() => svc.rob('g', 'u_rob', 'u_tgt', { robMinTargetBalance: 100n }));
+});
+
+test('rob — target balance one below minimum throws TARGET_BALANCE_TOO_LOW', async () => {
+  const robberWallet = makeWallet({ id: 'w_rob', userId: 'u_rob', balance: 1000n });
+  const targetWallet = makeWallet({ id: 'w_tgt', userId: 'u_tgt', balance: 99n });
+
+  const wallets: WalletRepository = {
+    findByGuildAndUser: async (_, userId) => userId === 'u_rob' ? robberWallet : targetWallet,
+    create: async () => robberWallet,
+    adjustBalance: async () => robberWallet,
+    atomicTransfer: async () => { throw new Error('should not reach'); },
+    updateCooldowns: async () => robberWallet,
+  };
+  const transactions: TransactionRepository = {
+    create: async () => ({ id: 't1', walletId: 'w', amount: 0n, reason: '', createdAt: NOW }),
+    listByWallet: async () => [],
+  };
+  const bus: EventBus = { publish: async () => {} };
+  const logger: Logger = { info: () => {}, warn: () => {}, error: () => {} };
+
+  const svc = new EconomyService(wallets, transactions, bus, logger);
+  await assert.rejects(
+    () => svc.rob('g', 'u_rob', 'u_tgt', { robMinTargetBalance: 100n }),
+    (e) => { assert.ok(e instanceof ConflictError); assert.equal((e as ConflictError).code, 'TARGET_BALANCE_TOO_LOW'); return true; }
+  );
+});

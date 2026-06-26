@@ -123,3 +123,25 @@ test('setPermission throws ValidationError for empty permission', async () => {
   const svc = new PermissionService(createRepo());
   await assert.rejects(() => svc.setPermission('g1', 'u1', '', true), ValidationError);
 });
+
+// BUG-R12: isGuildOwner=true must bypass all overrides, including deny overrides.
+// This is the guild owner fast-path at line 33 in PermissionService.ts.
+test('hasPermission — BUG-R12: isGuildOwner=true returns true even with a deny override', async () => {
+  const store = [makeOverride('o1', 'g1', 'owner_u', 'can_moderate', false)];
+  const svc = new PermissionService(createRepo(store));
+  const result = await svc.hasPermission('g1', 'owner_u', 'can_moderate', { isGuildOwner: true });
+  assert.equal(result, true);
+});
+
+test('hasPermission — isGuildOwner=true returns true with no override at all', async () => {
+  const svc = new PermissionService(createRepo());
+  const result = await svc.hasPermission('g1', 'owner_u', 'can_ban', { isGuildOwner: true });
+  assert.equal(result, true);
+});
+
+test('hasPermission — isGuildOwner=false still reads override normally', async () => {
+  const store = [makeOverride('o1', 'g1', 'u1', 'can_moderate', true)];
+  const svc = new PermissionService(createRepo(store));
+  const result = await svc.hasPermission('g1', 'u1', 'can_moderate', { isGuildOwner: false });
+  assert.equal(result, true);
+});

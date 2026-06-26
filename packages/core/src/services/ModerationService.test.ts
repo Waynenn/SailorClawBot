@@ -225,6 +225,15 @@ test('muteUser rejects a non-positive duration', async () => {
   await assert.rejects(() => h.service.muteUser('g1', 'u1', 0, 'mod1'), ValidationError);
 });
 
+// BUG-R2 regression: muteUser had no self-targeting guard (unlike warnUser/kickUser)
+test('muteUser — BUG-R2: rejects muting yourself', async () => {
+  const h = createHarness();
+  await assert.rejects(
+    () => h.service.muteUser('g1', 'mod1', 60, 'mod1'),
+    (e) => { assert.ok(e instanceof ValidationError); return true; }
+  );
+});
+
 test('banUser bans and emits moderation.banned', async () => {
   const h = createHarness({ permission: allowOverride });
   const ban = await h.service.banUser('g1', 'u1', 'raiding', 'mod1');
@@ -283,6 +292,15 @@ test('unmuteUser deactivates an active mute and emits moderation.unmuted', async
   await h.service.unmuteUser('g1', 'u1', 'mod1');
 
   assert.ok(h.events.some((e) => e.name === 'moderation.unmuted'));
+});
+
+// BUG-R3 regression: banUser had no self-targeting guard (unlike warnUser/kickUser)
+test('banUser — BUG-R3: rejects banning yourself', async () => {
+  const h = createHarness();
+  await assert.rejects(
+    () => h.service.banUser('g1', 'mod1', 'reason', 'mod1'),
+    (e) => { assert.ok(e instanceof ValidationError); return true; }
+  );
 });
 
 test('banUser throws ConflictError when user is already banned', async () => {

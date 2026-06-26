@@ -226,6 +226,10 @@ export function registerInteractionHandler(
           await handleShopButton(interaction, container);
         } else if (interaction.customId.startsWith('ticket_')) {
           await handleTicketButton(interaction, container);
+        } else if (interaction.customId.startsWith('giveaway_join_')) {
+          const giveawayId = interaction.customId.replace('giveaway_join_', '');
+          await container.giveawayService.join(giveawayId, interaction.user.id);
+          await interaction.reply({ content: '🎉 You have entered the giveaway!', ephemeral: true });
         } else if (interaction.customId.startsWith('verify_')) {
           const settings = await container.guildSettingsRepo.findByGuild(interaction.guildId);
           if (!settings?.verificationRoleId) {

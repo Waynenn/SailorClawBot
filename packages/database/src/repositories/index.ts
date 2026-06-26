@@ -22,3 +22,6 @@ export * from './ItemRepositoryImpl.js';
 export * from './InventoryItemRepositoryImpl.js';
 export * from './AutoModRepositoryImpl.js';
 export * from './StaffNoteRepositoryImpl.js';
+export * from './ReactionRoleRepositoryImpl.js';
+export * from './GiveawayRepositoryImpl.js';
+export * from './StarboardEntryRepositoryImpl.js';

@@ -166,3 +166,64 @@ test('nextTicketNumber — returns count + 1', async () => {
   const num = await svc.nextTicketNumber('g');
   assert.equal(num, 2);
 });
+
+// BUG-R13: closeTicketByUser was untested — must record closedById via closeWithDetails
+test('closeTicketByUser — BUG-R13: records closedById and publishes ticket.closed', async () => {
+  const { tickets, bus, logger, events, getTicket } = createHarness(makeTicket());
+  const svc = new TicketService(tickets, bus, logger);
+
+  const result = await svc.closeTicketByUser('ticket_1', 'staff_1');
+  assert.equal(result.status, 'closed');
+  assert.equal(result.closedById, 'staff_1');
+  assert.equal(getTicket()?.closedById, 'staff_1');
+  assert.ok(events.some((e) => e.name === 'ticket.closed'));
+});
+
+test('closeTicketByUser — throws NotFoundError when ticket missing', async () => {
+  const { tickets, bus, logger } = createHarness(null);
+  const svc = new TicketService(tickets, bus, logger);
+
+  await assert.rejects(
+    () => svc.closeTicketByUser('nonexistent', 'staff_1'),
+    (e) => { assert.ok(e instanceof NotFoundError); return true; }
+  );
+});
+
+test('closeTicketByUser — throws ConflictError when already closed', async () => {
+  const { tickets, bus, logger } = createHarness(makeTicket({ status: 'closed' }));
+  const svc = new TicketService(tickets, bus, logger);
+
+  await assert.rejects(
+    () => svc.closeTicketByUser('ticket_1', 'staff_1'),
+    (e) => { assert.ok(e instanceof ConflictError); return true; }
+  );
+});
+
+// BUG-R14: findByChannel was untested — must return ticket when channelId matches
+test('findByChannel — BUG-R14: returns ticket when channelId matches', async () => {
+  const { tickets, bus, logger } = createHarness(makeTicket({ channelId: 'ch_99' }));
+  const svc = new TicketService(tickets, bus, logger);
+
+  const result = await svc.findByChannel('ch_99');
+  assert.ok(result !== null);
+  assert.equal(result!.channelId, 'ch_99');
+});
+
+test('findByChannel — returns null when channelId does not match', async () => {
+  const { tickets, bus, logger } = createHarness(makeTicket({ channelId: 'ch_99' }));
+  const svc = new TicketService(tickets, bus, logger);
+
+  const result = await svc.findByChannel('ch_other');
+  assert.equal(result, null);
+});
+
+// BUG-R15: rateTicket NotFoundError path was untested
+test('rateTicket — BUG-R15: throws NotFoundError when ticket missing', async () => {
+  const { tickets, bus, logger } = createHarness(null);
+  const svc = new TicketService(tickets, bus, logger);
+
+  await assert.rejects(
+    () => svc.rateTicket('nonexistent', 5),
+    (e) => { assert.ok(e instanceof NotFoundError); return true; }
+  );
+});

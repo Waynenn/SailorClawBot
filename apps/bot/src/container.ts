@@ -22,6 +22,9 @@ import {
   InventoryItemRepositoryImpl,
   AutoModRepositoryImpl,
   StaffNoteRepositoryImpl,
+  ReactionRoleRepositoryImpl,
+  GiveawayRepositoryImpl,
+  StarboardEntryRepositoryImpl,
 } from '@sailorclawbot/database';
 import {
   GuildService,
@@ -35,6 +38,8 @@ import {
   PermissionService,
   XpService,
   AutoModService,
+  GiveawayService,
+  StarboardService,
 } from '@sailorclawbot/core';
 import { ConsoleLogger } from './lib/ConsoleLogger.js';
 import { InMemoryEventBus } from './lib/InMemoryEventBus.js';
@@ -66,6 +71,9 @@ function buildContainer() {
   const inventoryItemRepo = new InventoryItemRepositoryImpl(prisma);
   const autoModRepo = new AutoModRepositoryImpl(prisma);
   const staffNoteRepo = new StaffNoteRepositoryImpl(prisma);
+  const reactionRoleRepo = new ReactionRoleRepositoryImpl(prisma);
+  const giveawayRepo = new GiveawayRepositoryImpl(prisma);
+  const starboardEntryRepo = new StarboardEntryRepositoryImpl(prisma);
 
   const guildService = new GuildService(guildRepo, guildMemberRepo, eventBus, logger);
   const profileService = new ProfileService(profileRepo, eventBus, logger);
@@ -78,6 +86,8 @@ function buildContainer() {
   const permissionService = new PermissionService(permissionRepo, roleMappingRepo);
   const xpService = new XpService(profileRepo, eventBus, logger);
   const autoModService = new AutoModService();
+  const giveawayService = new GiveawayService(giveawayRepo, logger);
+  const starboardService = new StarboardService(starboardEntryRepo, logger);
 
   return {
     prisma,
@@ -102,6 +112,11 @@ function buildContainer() {
     autoModRepo,
     autoModService,
     staffNoteRepo,
+    reactionRoleRepo,
+    giveawayRepo,
+    starboardEntryRepo,
+    giveawayService,
+    starboardService,
   };
 }
 

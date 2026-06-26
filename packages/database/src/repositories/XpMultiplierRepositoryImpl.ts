@@ -11,9 +11,9 @@ export class XpMultiplierRepositoryImpl implements XpMultiplierRepository {
     return rows.map(toXpMultiplierDto);
   }
 
-  public async findByTarget(guildId: string, targetId: string): Promise<XpMultiplierDto | null> {
+  public async findByTarget(guildId: string, targetId: string, targetType: 'channel' | 'role'): Promise<XpMultiplierDto | null> {
     const row = await this.db.xpMultiplier.findFirst({
-      where: { guildId, targetId },
+      where: { guildId, targetId, targetType },
     });
     return row ? toXpMultiplierDto(row) : null;
   }

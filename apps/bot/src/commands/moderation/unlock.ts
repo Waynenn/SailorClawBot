@@ -14,8 +14,13 @@ export const unlockCommand: Command = {
       await interaction.reply({ content: 'This command can only be used in a server text channel.', ephemeral: true });
       return;
     }
+    await interaction.deferReply({ ephemeral: true });
     const channel = interaction.channel as GuildChannel;
-    await channel.permissionOverwrites.edit(interaction.guild!.roles.everyone, { SendMessages: null });
-    await interaction.reply({ content: '🔓 **Channel unlocked.**', ephemeral: true });
+    try {
+      await channel.permissionOverwrites.edit(interaction.guild!.roles.everyone, { SendMessages: null });
+      await interaction.editReply({ content: '🔓 **Channel unlocked.**' });
+    } catch {
+      await interaction.editReply({ content: '❌ Failed to unlock — check my permissions.' });
+    }
   },
 };

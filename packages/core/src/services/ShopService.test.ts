@@ -250,6 +250,20 @@ test('sellItem — removes item from inventory', async () => {
   assert.equal(invStore.length, 0);
 });
 
+// BUG-R1 regression: wallet=null caused item to be removed without payment
+// Fixed: sellItem now throws NotFoundError when wallet is missing
+test('sellItem — BUG-R1: throws NotFoundError when wallet missing, does not remove item', async () => {
+  const item = makeItem({ price: 200n });
+  const invItem = makeInvItem(item);
+  const { svc, invStore } = createHarness({ items: [item], wallet: null, invItems: [invItem] });
+
+  await assert.rejects(
+    () => svc.sellItem('g', 'u', 'item_1'),
+    (e) => { assert.ok(e instanceof NotFoundError); return true; }
+  );
+  assert.equal(invStore.length, 1, 'item must not be removed when payment fails');
+});
+
 // ─── createItem / deleteItem ──────────────────────────────────────────────────
 
 test('createItem — adds item to guild store', async () => {

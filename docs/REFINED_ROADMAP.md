@@ -1,7 +1,8 @@
-# SailorClawBot: Roadmap
+# 🌙 SailorClawBot: Roadmap
 
 **Baseline:** June 14, 2026  
-**Design spec:** `docs/superpowers/specs/2026-06-14-bot-design.md`
+**Design spec:** `docs/superpowers/specs/2026-06-14-bot-design.md`  
+**Last updated:** June 27, 2026
 
 ---
 
@@ -16,9 +17,9 @@
 | 3 | XP/Leveling + Twitch poller | ✅ DONE |
 | 4 | Economy extended (gambling, shop, inventory) | ✅ DONE |
 | 5 | Tickets full Discord integration | ✅ DONE |
-| 6 | Auto-moderation (6 rule types) + Sentry + bulk-mod commands | 🔜 NEXT |
-| 7 | Server management (logging, welcome, reaction roles, giveaways, starboard) | ⏳ |
-| 8 | Family/Clan | ⏳ |
+| 6 | 🌙 Auto-moderation (6 rule types) + Sentry + Anti-raid + bulk-mod | ✅ DONE |
+| 7 | 🌙 Server management (logging, welcome, reaction roles, giveaways, starboard) | ✅ DONE |
+| 8 | Family/Clan | ⏳ NEXT |
 | 9 | Admin Dashboard (Next.js + OAuth2) | ⏳ |
 | 10 | User Dashboard (rank card, leaderboards) | ⏳ |
 | 11 | Achievements (20+ types) | ⏳ |
@@ -67,7 +68,7 @@
 
 ---
 
-## PHASE 2.5 🔜 NEXT — Foundation Fixes
+## PHASE 2.5 ✅ DONE — Foundation Fixes
 
 **Completion criteria:**
 ```sh
@@ -218,7 +219,7 @@ Button interactions:
 
 ---
 
-## PHASE 6 — Auto-Moderation
+## PHASE 6 ✅ DONE — Auto-Moderation + Sentry + Anti-raid
 
 ### AutoModService (packages/core)
 `checkMessage(message, rules, guildSettings)` → `AutoModResult | null`
@@ -241,7 +242,7 @@ Button interactions:
 
 ---
 
-## PHASE 7 — Server Management
+## PHASE 7 ✅ DONE — 🌙 Server Management
 
 ### Logging
 - `LogService.log(guildId, event, data)` → format embed → send to `logChannelId`
@@ -275,7 +276,7 @@ Button interactions:
 
 ---
 
-## PHASE 8 — Family / Clan
+## PHASE 8 ⏳ NEXT — Family / Clan
 
 **Social only. No Discord roles created. Bot-level roles: OWNER / OFFICER / MEMBER.**
 

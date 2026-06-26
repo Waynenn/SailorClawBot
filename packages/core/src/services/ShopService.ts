@@ -91,13 +91,13 @@ export class ShopService {
 
     const refund = item.price / 2n;
     const wallet = await this.wallets.findByGuildAndUser(guildId, userId);
-    let newBalance = 0n;
-    if (wallet && refund > 0n) {
+    if (!wallet) throw new NotFoundError('Wallet', `${guildId}:${userId}`);
+
+    let newBalance = wallet.balance;
+    if (refund > 0n) {
       const updated = await this.wallets.adjustBalance(wallet.id, refund);
       await this.transactions.create({ walletId: wallet.id, amount: refund, reason: `Sell: ${item.name}` });
       newBalance = updated.balance;
-    } else if (wallet) {
-      newBalance = wallet.balance;
     }
 
     await this.inventory.removeItem(guildId, userId, itemId);

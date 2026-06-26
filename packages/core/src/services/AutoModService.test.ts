@@ -100,4 +100,80 @@ describe('AutoModService', () => {
       assert.equal(result, null);
     });
   });
+
+  // BUG-R7: spam rule was entirely untested — spamTracker is module-level state,
+  // each test must use unique guildId+userId to avoid cross-test pollution
+  describe('spam rule', () => {
+    it('returns null on first message (below threshold)', () => {
+      const result = svc.checkMessage('hello', 'spam_u1', 'c1', 'spam_g1', [
+        { id: '7', guildId: 'spam_g1', type: 'spam', enabled: true, config: { threshold: 3, windowMs: 60_000, action: 'mute', duration: 5 } },
+      ]);
+      assert.equal(result, null);
+    });
+
+    it('returns null on second message (below threshold)', () => {
+      const spamRule = { threshold: 3, windowMs: 60_000, action: 'mute' as const, duration: 5 };
+      svc.checkMessage('msg1', 'spam_u2', 'c1', 'spam_g2', [{ id: '8', guildId: 'spam_g2', type: 'spam', enabled: true, config: spamRule }]);
+      const result = svc.checkMessage('msg2', 'spam_u2', 'c1', 'spam_g2', [{ id: '8', guildId: 'spam_g2', type: 'spam', enabled: true, config: spamRule }]);
+      assert.equal(result, null);
+    });
+
+    it('triggers on third message (count reaches threshold)', () => {
+      const spamRule = { threshold: 3, windowMs: 60_000, action: 'mute' as const, duration: 5 };
+      svc.checkMessage('msg1', 'spam_u3', 'c1', 'spam_g3', [{ id: '9', guildId: 'spam_g3', type: 'spam', enabled: true, config: spamRule }]);
+      svc.checkMessage('msg2', 'spam_u3', 'c1', 'spam_g3', [{ id: '9', guildId: 'spam_g3', type: 'spam', enabled: true, config: spamRule }]);
+      const result = svc.checkMessage('msg3', 'spam_u3', 'c1', 'spam_g3', [{ id: '9', guildId: 'spam_g3', type: 'spam', enabled: true, config: spamRule }]);
+      assert.deepEqual(result, { ruleType: 'spam', action: 'mute', durationMinutes: 5 });
+    });
+
+    it('resets window after triggering — next message starts fresh', () => {
+      const spamRule = { threshold: 3, windowMs: 60_000, action: 'mute' as const, duration: 5 };
+      svc.checkMessage('m1', 'spam_u4', 'c1', 'spam_g4', [{ id: '10', guildId: 'spam_g4', type: 'spam', enabled: true, config: spamRule }]);
+      svc.checkMessage('m2', 'spam_u4', 'c1', 'spam_g4', [{ id: '10', guildId: 'spam_g4', type: 'spam', enabled: true, config: spamRule }]);
+      svc.checkMessage('m3', 'spam_u4', 'c1', 'spam_g4', [{ id: '10', guildId: 'spam_g4', type: 'spam', enabled: true, config: spamRule }]); // triggers, clears entry
+      const result = svc.checkMessage('m4', 'spam_u4', 'c1', 'spam_g4', [{ id: '10', guildId: 'spam_g4', type: 'spam', enabled: true, config: spamRule }]);
+      assert.equal(result, null);
+    });
+  });
+
+  // BUG-R8: @here and @everyone must count as individual mention matches
+  describe('mentions rule — special mention tokens', () => {
+    it('@here counts as one mention', () => {
+      const result = svc.checkMessage('@here', 'u1', 'c1', 'g1', [
+        { id: '11', guildId: 'g1', type: 'mentions', enabled: true, config: { max: 0, action: 'delete' } },
+      ]);
+      assert.deepEqual(result, { ruleType: 'mentions', action: 'delete' });
+    });
+
+    it('@everyone counts as one mention', () => {
+      const result = svc.checkMessage('@everyone', 'u1', 'c1', 'g1', [
+        { id: '12', guildId: 'g1', type: 'mentions', enabled: true, config: { max: 0, action: 'delete' } },
+      ]);
+      assert.deepEqual(result, { ruleType: 'mentions', action: 'delete' });
+    });
+
+    it('@here and @everyone together count as 2 mentions', () => {
+      const result = svc.checkMessage('@here @everyone', 'u1', 'c1', 'g1', [
+        { id: '13', guildId: 'g1', type: 'mentions', enabled: true, config: { max: 1, action: 'mute', duration: 5 } },
+      ]);
+      assert.deepEqual(result, { ruleType: 'mentions', action: 'mute', durationMinutes: 5 });
+    });
+  });
+
+  // BUG-R9: invalid regex in words rule must be silently skipped, not crash
+  describe('words rule — invalid regex handling', () => {
+    it('skips invalid regex pattern and continues to next pattern', () => {
+      const result = svc.checkMessage('badword here', 'u1', 'c1', 'g1', [
+        { id: '14', guildId: 'g1', type: 'words', enabled: true, config: { patterns: ['[invalid(', 'badword'], action: 'warn' } },
+      ]);
+      assert.deepEqual(result, { ruleType: 'words', action: 'warn' });
+    });
+
+    it('returns null when all patterns are invalid regex', () => {
+      const result = svc.checkMessage('anything', 'u1', 'c1', 'g1', [
+        { id: '15', guildId: 'g1', type: 'words', enabled: true, config: { patterns: ['[invalid(', '(?P<bad>'], action: 'warn' } },
+      ]);
+      assert.equal(result, null);
+    });
+  });
 });
