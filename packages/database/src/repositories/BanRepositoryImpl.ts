@@ -46,6 +46,14 @@ export class BanRepositoryImpl implements BanRepository {
     return rows.filter((r) => !r.expiresAt || r.expiresAt >= now).map(toBanDto);
   }
 
+  public async findExpired(): Promise<BanDto[]> {
+    const now = new Date();
+    const rows = await this.db.ban.findMany({
+      where: { isActive: true, expiresAt: { not: null, lte: now } },
+    });
+    return rows.map(toBanDto);
+  }
+
   public async create(input: Omit<BanDto, 'id' | 'createdAt'>): Promise<BanDto> {
     if (!input.guildId || input.guildId.trim().length === 0) {
       throw new ValidationError('Guild ID is required', 'guildId');

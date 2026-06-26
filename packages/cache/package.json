@@ -1,0 +1,17 @@
+{
+  "name": "@sailorclawbot/cache",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test \"dist/**/*.test.js\""
+  },
+  "dependencies": {
+    "@sailorclawbot/contracts": "workspace:*",
+    "ioredis": "^5.4.1"
+  }
+}

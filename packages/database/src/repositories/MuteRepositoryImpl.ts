@@ -46,6 +46,14 @@ export class MuteRepositoryImpl implements MuteRepository {
     return rows.filter((r) => !r.expiresAt || r.expiresAt >= now).map(toMuteDto);
   }
 
+  public async findExpired(): Promise<MuteDto[]> {
+    const now = new Date();
+    const rows = await this.db.mute.findMany({
+      where: { isActive: true, expiresAt: { lte: now } },
+    });
+    return rows.map(toMuteDto);
+  }
+
   public async create(input: Omit<MuteDto, 'id' | 'createdAt'>): Promise<MuteDto> {
     if (!input.guildId || input.guildId.trim().length === 0) {
       throw new ValidationError('Guild ID is required', 'guildId');

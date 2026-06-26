@@ -65,6 +65,7 @@ function createHarness(opts: HarnessOptions = {}) {
     findById: async () => null,
     findByGuildAndUser: async () => opts.existingMute ?? null,
     findActive: async () => [],
+    findExpired: async () => [],
     create: async (input) => {
       const dto: MuteDto = { id: `mute_${muteCreates.length + 1}`, createdAt: new Date(), ...input };
       muteCreates.push(dto);
@@ -88,6 +89,7 @@ function createHarness(opts: HarnessOptions = {}) {
     findById: async () => null,
     findByGuildAndUser: async () => opts.existingBan ?? null,
     findActive: async () => [],
+    findExpired: async () => [],
     create: async (input) => {
       const dto: BanDto = { id: `ban_${banCreates.length + 1}`, createdAt: new Date(), ...input };
       banCreates.push(dto);
