@@ -41,7 +41,7 @@ import {
   GiveawayService,
   StarboardService,
 } from '@sailorclawbot/core';
-import { createRedis, RedisMessageCache } from '@sailorclawbot/cache';
+import { createRedis, RedisMessageCache, RedisRateLimiter } from '@sailorclawbot/cache';
 import { ConsoleLogger } from './lib/ConsoleLogger.js';
 import { InMemoryEventBus } from './lib/InMemoryEventBus.js';
 
@@ -56,6 +56,8 @@ function buildContainer() {
     logger.warn('Redis connection error', { error: err.message })
   );
   const messageCache = new RedisMessageCache(redis);
+  // Shares the same client; falls back to in-memory per-shard when Redis is down.
+  const rateLimiter = new RedisRateLimiter(redis);
 
   const guildRepo = new GuildRepositoryImpl(prisma);
   const guildMemberRepo = new GuildMemberRepositoryImpl(prisma);
@@ -126,6 +128,7 @@ function buildContainer() {
     giveawayService,
     starboardService,
     messageCache,
+    rateLimiter,
   };
 }
 

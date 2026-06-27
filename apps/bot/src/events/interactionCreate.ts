@@ -16,6 +16,7 @@ import {
 } from '../commands/economy/blackjack.js';
 import { buildShopEmbed, shopPageButtons, SHOP_PAGE_SIZE } from '../commands/economy/shop.js';
 import { buildTicketEmbed, ticketActionButtons, ratingButtons, updateStatsEmbed, lockTicketChannel } from '../lib/ticketHelper.js';
+import { consumeCommand, consumeButton, retryAfterSeconds } from '../lib/rateLimitConfig.js';
 
 const PAGE_SIZE = 10;
 
@@ -218,6 +219,15 @@ export function registerInteractionHandler(
     // Button interactions
     if (interaction.isButton()) {
       if (!interaction.guildId) return;
+
+      const buttonRetry = await consumeButton(container.rateLimiter, interaction.guildId, interaction.user.id);
+      if (buttonRetry > 0) {
+        await interaction
+          .reply({ content: `⏳ Слишком часто, подожди ${retryAfterSeconds(buttonRetry)}с.`, ephemeral: true })
+          .catch(() => null);
+        return;
+      }
+
       try {
         if (interaction.customId.startsWith('lb_')) {
           await handleLeaderboardButton(interaction, container);
@@ -267,6 +277,20 @@ export function registerInteractionHandler(
 
     const command = commands.get(interaction.commandName);
     if (!command) return;
+
+    const cmdRetry = await consumeCommand(
+      container.rateLimiter,
+      interaction.commandName,
+      interaction.guildId,
+      interaction.user.id,
+    );
+    if (cmdRetry > 0) {
+      await interaction.reply({
+        content: `⏳ Слишком часто, подожди ${retryAfterSeconds(cmdRetry)}с.`,
+        ephemeral: true,
+      });
+      return;
+    }
 
     try {
       await command.execute(interaction, container);
