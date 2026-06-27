@@ -205,6 +205,9 @@ export function toGuildSettingsDto(row: GuildSettings): GuildSettingsDto {
     starboardChannelId: row.starboardChannelId,
     starboardThreshold: row.starboardThreshold,
     logEvents: (row.logEvents as unknown as string[]) ?? [],
+    logIgnoredChannels: (row.logIgnoredChannels as unknown as string[]) ?? [],
+    logChannelOverrides: (row.logChannelOverrides as unknown as Record<string, string>) ?? {},
+    muteRoleId: row.muteRoleId,
   };
 }
 
@@ -290,6 +293,9 @@ export function toGiveawayDto(row: Giveaway): GiveawayDto {
     hostId: row.hostId,
     participants: (row.participants as unknown as string[]) ?? [],
     winners: (row.winners as unknown as string[]) ?? [],
+    requiredRoleId: row.requiredRoleId,
+    boosterOnly: row.boosterOnly,
+    minLevel: row.minLevel,
   };
 }
 

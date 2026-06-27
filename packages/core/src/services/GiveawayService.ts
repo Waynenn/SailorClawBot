@@ -12,6 +12,9 @@ export interface CreateGiveawayInput {
   winnersCount: number;
   durationMs: number;
   hostId: string;
+  requiredRoleId?: string | null;
+  boosterOnly?: boolean;
+  minLevel?: number | null;
 }
 
 export class GiveawayService {
@@ -32,6 +35,9 @@ export class GiveawayService {
       winnersCount: input.winnersCount,
       endsAt,
       hostId: input.hostId,
+      requiredRoleId: input.requiredRoleId ?? null,
+      boosterOnly: input.boosterOnly ?? false,
+      minLevel: input.minLevel ?? null,
     });
   }
 

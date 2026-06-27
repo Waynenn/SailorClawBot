@@ -56,6 +56,10 @@ export interface GuildSettingsDto {
   starboardThreshold: number;
   // Logging event filter
   logEvents: string[];
+  logIgnoredChannels: string[];
+  logChannelOverrides: Record<string, string>;
+  // Moderation
+  muteRoleId: string | null;
 }
 
 export interface TwitchSubscriptionDto {
@@ -228,6 +232,9 @@ export interface GiveawayDto {
   hostId: string;
   participants: string[];
   winners: string[];
+  requiredRoleId: string | null;
+  boosterOnly: boolean;
+  minLevel: number | null;
 }
 
 export interface StarboardEntryDto {

@@ -22,6 +22,9 @@ function makeGiveaway(overrides: Partial<GiveawayDto> = {}): GiveawayDto {
     hostId: 'host_1',
     participants: [],
     winners: [],
+    requiredRoleId: null,
+    boosterOnly: false,
+    minLevel: null,
     ...overrides,
   };
 }

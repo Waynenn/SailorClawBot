@@ -35,6 +35,9 @@ export class GiveawayRepositoryImpl implements GiveawayRepository {
         winnersCount: input.winnersCount,
         endsAt: input.endsAt,
         hostId: input.hostId,
+        requiredRoleId: input.requiredRoleId,
+        boosterOnly: input.boosterOnly,
+        minLevel: input.minLevel,
       },
     });
     return toGiveawayDto(row);
