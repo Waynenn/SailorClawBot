@@ -12,6 +12,7 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@sailorclawbot/cache": "workspace:*",
     "@sailorclawbot/contracts": "workspace:*",
     "@sailorclawbot/core": "workspace:*",
     "@sailorclawbot/database": "workspace:*",

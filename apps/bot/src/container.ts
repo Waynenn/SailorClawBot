@@ -41,6 +41,7 @@ import {
   GiveawayService,
   StarboardService,
 } from '@sailorclawbot/core';
+import { createRedis, RedisMessageCache } from '@sailorclawbot/cache';
 import { ConsoleLogger } from './lib/ConsoleLogger.js';
 import { InMemoryEventBus } from './lib/InMemoryEventBus.js';
 
@@ -48,6 +49,13 @@ function buildContainer() {
   const prisma = new PrismaClient();
   const logger = new ConsoleLogger();
   const eventBus = new InMemoryEventBus(logger);
+
+  // Message cache (Redis-backed; null client → graceful no-op so logging falls
+  // back to "content unavailable" instead of crashing when Redis is absent).
+  const redis = createRedis(process.env.REDIS_URL, (err) =>
+    logger.warn('Redis connection error', { error: err.message })
+  );
+  const messageCache = new RedisMessageCache(redis);
 
   const guildRepo = new GuildRepositoryImpl(prisma);
   const guildMemberRepo = new GuildMemberRepositoryImpl(prisma);
@@ -117,6 +125,7 @@ function buildContainer() {
     starboardEntryRepo,
     giveawayService,
     starboardService,
+    messageCache,
   };
 }
 

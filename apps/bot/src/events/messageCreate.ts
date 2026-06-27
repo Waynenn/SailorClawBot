@@ -102,6 +102,19 @@ export function registerMessageCreateHandler(client: Client, container: Containe
     const guildId = message.guildId;
     const userId = message.author.id;
 
+    // Cache for delete/edit logging (content survives even if dropped from
+    // Discord's gateway cache). Best-effort; fire-and-forget.
+    void container.messageCache.set({
+      id: message.id,
+      guildId,
+      channelId: message.channelId,
+      authorId: userId,
+      authorTag: message.author.tag,
+      content: message.content,
+      attachments: message.attachments.map((a) => a.url),
+      createdAt: new Date(message.createdTimestamp).toISOString(),
+    });
+
     if (await handleTicketOpen(message, container)) return;
 
     // AutoMod check (before XP — violations should not grant XP)

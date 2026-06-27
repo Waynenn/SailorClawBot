@@ -27,6 +27,9 @@ importers:
 
   apps/bot:
     dependencies:
+      '@sailorclawbot/cache':
+        specifier: workspace:*
+        version: link:../../packages/cache
       '@sailorclawbot/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

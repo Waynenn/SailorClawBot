@@ -5,7 +5,15 @@ import type { Container } from '../../container.js';
 import { handleCommandError } from '../../middleware/errorHandler.js';
 import { EMBED_COLORS } from '../../lib/embedColors.js';
 
-const ALL_LOG_EVENTS = ['ban', 'unban', 'mute', 'unmute', 'warn', 'kick', 'join', 'leave', 'messageEdit', 'messageDelete', 'channelCreate', 'channelDelete'];
+const ALL_LOG_EVENTS = [
+  'ban', 'unban', 'mute', 'unmute', 'warn', 'kick',
+  'join', 'leave',
+  'messageDelete', 'messageBulkDelete', 'messageEdit',
+  'memberUpdate',
+  'channelCreate', 'channelDelete', 'channelUpdate',
+  'roleCreate', 'roleDelete', 'roleUpdate',
+  'voiceJoin', 'voiceLeave', 'voiceMove',
+];
 
 export const logCommand: Command = {
   data: new SlashCommandBuilder()
@@ -21,6 +29,17 @@ export const logCommand: Command = {
       s.setName('filter')
         .setDescription('Filter which events to log (comma-separated)')
         .addStringOption((o) => o.setName('events').setDescription(`Events: ${ALL_LOG_EVENTS.join(', ')}`).setRequired(true))
+    )
+    .addSubcommand((s) =>
+      s.setName('ignore')
+        .setDescription('Toggle a channel as ignored (excluded from logs)')
+        .addChannelOption((o) => o.setName('channel').setDescription('Channel to ignore/un-ignore').setRequired(true))
+    )
+    .addSubcommand((s) =>
+      s.setName('route')
+        .setDescription('Route one event type to its own channel (omit channel to clear)')
+        .addStringOption((o) => o.setName('event').setDescription(`Event: ${ALL_LOG_EVENTS.join(', ')}`).setRequired(true))
+        .addChannelOption((o) => o.setName('channel').setDescription('Target channel (omit to clear)').setRequired(false))
     )
     .addSubcommand((s) => s.setName('disable').setDescription('Disable logging')),
 
@@ -50,6 +69,33 @@ export const logCommand: Command = {
           embeds: [new EmbedBuilder().setColor(EMBED_COLORS.info)
             .setTitle('✅ Log filter updated')
             .addFields({ name: 'Active events', value: events.join(', ') })],
+        });
+      } else if (sub === 'ignore') {
+        const channel = interaction.options.getChannel('channel', true);
+        const settings = await container.guildSettingsRepo.findByGuild(guildId);
+        const current = settings?.logIgnoredChannels ?? [];
+        const isIgnored = current.includes(channel.id);
+        const next = isIgnored ? current.filter((id) => id !== channel.id) : [...current, channel.id];
+        await container.guildSettingsRepo.upsert(guildId, { logIgnoredChannels: next });
+        await interaction.editReply({
+          embeds: [new EmbedBuilder().setColor(EMBED_COLORS.info)
+            .setDescription(isIgnored ? `✅ <#${channel.id}> is now logged again.` : `🔕 <#${channel.id}> excluded from logs.`)],
+        });
+      } else if (sub === 'route') {
+        const event = interaction.options.getString('event', true).trim();
+        if (!ALL_LOG_EVENTS.includes(event)) {
+          await interaction.editReply({ content: `Invalid event. Valid: ${ALL_LOG_EVENTS.join(', ')}` });
+          return;
+        }
+        const channel = interaction.options.getChannel('channel', false);
+        const settings = await container.guildSettingsRepo.findByGuild(guildId);
+        const overrides = { ...(settings?.logChannelOverrides ?? {}) };
+        if (channel) overrides[event] = channel.id;
+        else delete overrides[event];
+        await container.guildSettingsRepo.upsert(guildId, { logChannelOverrides: overrides });
+        await interaction.editReply({
+          embeds: [new EmbedBuilder().setColor(EMBED_COLORS.info)
+            .setDescription(channel ? `📍 \`${event}\` → <#${channel.id}>` : `↩️ \`${event}\` routing cleared (uses default channel).`)],
         });
       } else {
         await container.guildSettingsRepo.upsert(guildId, { logChannelId: null, logEvents: [] });

@@ -52,6 +52,7 @@ import { registerGuildMemberAddHandler } from './events/guildMemberAdd.js';
 import { registerGuildMemberRemoveHandler } from './events/guildMemberRemove.js';
 import { registerMessageReactionAddHandler } from './events/messageReactionAdd.js';
 import { registerMessageReactionRemoveHandler } from './events/messageReactionRemove.js';
+import { registerLoggingHandlers } from './events/logging.js';
 import { TwitchPoller } from './lib/TwitchPoller.js';
 
 const ALL_COMMANDS: Command[] = [
@@ -118,6 +119,7 @@ export async function startBot(): Promise<void> {
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
       GatewayIntentBits.GuildMessageReactions,
+      GatewayIntentBits.GuildVoiceStates,
     ],
     partials: [Partials.Message, Partials.Reaction, Partials.User],
   });
@@ -136,6 +138,7 @@ export async function startBot(): Promise<void> {
   registerGuildMemberRemoveHandler(client, container);
   registerMessageReactionAddHandler(client, container);
   registerMessageReactionRemoveHandler(client, container);
+  registerLoggingHandlers(client, container);
 
   // Twitch poller (only if credentials configured)
   const twitchClientId = process.env.TWITCH_CLIENT_ID;
