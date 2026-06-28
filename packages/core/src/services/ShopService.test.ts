@@ -1,301 +1,460 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import type {
-  ItemRepository,
-  InventoryItemRepository,
-  WalletRepository,
-  TransactionRepository,
-  ItemDto,
-  InventoryItemDto,
-  CreateItemDto,
-  WalletDto,
-  TransactionDto,
-} from '@sailorclawbot/contracts';
-import type { EventBus } from '../common/events/EventBus.js';
-import type { Logger } from '../common/logging/Logger.js';
-import { ShopService } from './ShopService.js';
-import { NotFoundError } from '../common/errors/NotFoundError.js';
-import { ConflictError } from '../common/errors/ConflictError.js';
+	CreateItemDto,
+	InventoryItemDto,
+	InventoryItemRepository,
+	ItemDto,
+	ItemRepository,
+	TransactionDto,
+	TransactionRepository,
+	WalletDto,
+	WalletRepository,
+} from "@sailorclawbot/contracts";
+import { ConflictError } from "../common/errors/ConflictError.js";
+import { NotFoundError } from "../common/errors/NotFoundError.js";
+import type { EventBus } from "../common/events/EventBus.js";
+import type { Logger } from "../common/logging/Logger.js";
+import { ShopService } from "./ShopService.js";
 
-const NOW = new Date('2024-01-01T00:00:00Z');
+const NOW = new Date("2024-01-01T00:00:00Z");
 
 function makeItem(overrides: Partial<ItemDto> = {}): ItemDto {
-  return {
-    id: 'item_1',
-    guildId: 'g',
-    name: 'Test Item',
-    description: 'A test item',
-    price: 100n,
-    emoji: '🎁',
-    type: 'cosmetic',
-    effect: null,
-    stock: null,
-    createdAt: NOW,
-    ...overrides,
-  };
+	return {
+		id: "item_1",
+		guildId: "g",
+		name: "Test Item",
+		description: "A test item",
+		price: 100n,
+		emoji: "🎁",
+		type: "cosmetic",
+		effect: null,
+		stock: null,
+		createdAt: NOW,
+		...overrides,
+	};
 }
 
 function makeWallet(overrides: Partial<WalletDto> = {}): WalletDto {
-  return {
-    id: 'wallet_1',
-    guildId: 'g',
-    userId: 'u',
-    balance: 1000n,
-    lastDailyAt: null,
-    lastWorkAt: null,
-    lastCrimeAt: null,
-    lastRobAt: null,
-    workUsesToday: 0,
-    crimeUsesToday: 0,
-    dailyLimitReset: null,
-    createdAt: NOW,
-    updatedAt: NOW,
-    ...overrides,
-  };
+	return {
+		id: "wallet_1",
+		guildId: "g",
+		userId: "u",
+		balance: 1000n,
+		lastDailyAt: null,
+		lastWorkAt: null,
+		lastCrimeAt: null,
+		lastRobAt: null,
+		workUsesToday: 0,
+		crimeUsesToday: 0,
+		dailyLimitReset: null,
+		createdAt: NOW,
+		updatedAt: NOW,
+		...overrides,
+	};
 }
 
 function makeInvItem(item: ItemDto, quantity = 1): InventoryItemDto {
-  return { id: 'inv_1', guildId: 'g', userId: 'u', itemId: item.id, quantity, acquiredAt: NOW, item };
+	return {
+		id: "inv_1",
+		guildId: "g",
+		userId: "u",
+		itemId: item.id,
+		quantity,
+		acquiredAt: NOW,
+		item,
+	};
 }
 
-function createHarness(opts: {
-  items?: ItemDto[];
-  wallet?: WalletDto | null;
-  invItems?: InventoryItemDto[];
-} = {}) {
-  const { items = [], wallet = makeWallet(), invItems = [] } = opts;
-  const itemsStore: ItemDto[] = [...items];
-  let walletState: WalletDto | null = wallet;
-  const invStore: InventoryItemDto[] = [...invItems];
-  const txs: TransactionDto[] = [];
+function createHarness(
+	opts: {
+		items?: ItemDto[];
+		wallet?: WalletDto | null;
+		invItems?: InventoryItemDto[];
+	} = {},
+) {
+	const { items = [], wallet = makeWallet(), invItems = [] } = opts;
+	const itemsStore: ItemDto[] = [...items];
+	let walletState: WalletDto | null = wallet;
+	const invStore: InventoryItemDto[] = [...invItems];
+	const txs: TransactionDto[] = [];
 
-  const itemRepo: ItemRepository = {
-    findById: async (id) => itemsStore.find((i) => i.id === id) ?? null,
-    findByGuild: async (guildId) => itemsStore.filter((i) => i.guildId === guildId),
-    create: async (data: CreateItemDto) => {
-      const item = makeItem({ ...data, id: `item_${itemsStore.length + 1}` });
-      itemsStore.push(item);
-      return item;
-    },
-    update: async (id, data) => {
-      const idx = itemsStore.findIndex((i) => i.id === id);
-      if (idx === -1) throw new Error('item not found');
-      itemsStore[idx] = { ...itemsStore[idx], ...data } as ItemDto;
-      return itemsStore[idx];
-    },
-    delete: async (id) => {
-      const idx = itemsStore.findIndex((i) => i.id === id);
-      if (idx !== -1) itemsStore.splice(idx, 1);
-    },
-    decrementStockIfAvailable: async (id) => {
-      const item = itemsStore.find((i) => i.id === id);
-      if (!item || item.stock === null || item.stock <= 0) return false;
-      item.stock -= 1;
-      return true;
-    },
-  };
+	const itemRepo: ItemRepository = {
+		findById: async (id) => itemsStore.find((i) => i.id === id) ?? null,
+		findByGuild: async (guildId) =>
+			itemsStore.filter((i) => i.guildId === guildId),
+		create: async (data: CreateItemDto) => {
+			const item = makeItem({ ...data, id: `item_${itemsStore.length + 1}` });
+			itemsStore.push(item);
+			return item;
+		},
+		update: async (id, data) => {
+			const idx = itemsStore.findIndex((i) => i.id === id);
+			if (idx === -1) throw new Error("item not found");
+			itemsStore[idx] = { ...itemsStore[idx], ...data } as ItemDto;
+			return itemsStore[idx];
+		},
+		delete: async (id) => {
+			const idx = itemsStore.findIndex((i) => i.id === id);
+			if (idx !== -1) itemsStore.splice(idx, 1);
+		},
+		decrementStockIfAvailable: async (id) => {
+			const item = itemsStore.find((i) => i.id === id);
+			if (!item || item.stock === null || item.stock <= 0) return false;
+			item.stock -= 1;
+			return true;
+		},
+	};
 
-  const invRepo: InventoryItemRepository = {
-    findByUser: async () => invStore,
-    findByUserAndItem: async (_, __, itemId) => invStore.find((i) => i.itemId === itemId) ?? null,
-    addItem: async (guildId, userId, itemId) => {
-      const existing = invStore.find((i) => i.itemId === itemId);
-      if (existing) { existing.quantity += 1; return existing; }
-      const newEntry: InventoryItemDto = { id: `inv_${invStore.length + 1}`, guildId, userId, itemId, quantity: 1, acquiredAt: NOW };
-      invStore.push(newEntry);
-      return newEntry;
-    },
-    removeItem: async (_, __, itemId) => {
-      const idx = invStore.findIndex((i) => i.itemId === itemId);
-      if (idx === -1) return null;
-      const entry = invStore[idx];
-      if (entry.quantity <= 1) { invStore.splice(idx, 1); return { ...entry, quantity: 0 }; }
-      entry.quantity -= 1;
-      return entry;
-    },
-  };
+	const invRepo: InventoryItemRepository = {
+		findByUser: async () => invStore,
+		findByUserAndItem: async (_, __, itemId) =>
+			invStore.find((i) => i.itemId === itemId) ?? null,
+		addItem: async (guildId, userId, itemId) => {
+			const existing = invStore.find((i) => i.itemId === itemId);
+			if (existing) {
+				existing.quantity += 1;
+				return existing;
+			}
+			const newEntry: InventoryItemDto = {
+				id: `inv_${invStore.length + 1}`,
+				guildId,
+				userId,
+				itemId,
+				quantity: 1,
+				acquiredAt: NOW,
+			};
+			invStore.push(newEntry);
+			return newEntry;
+		},
+		removeItem: async (_, __, itemId) => {
+			const idx = invStore.findIndex((i) => i.itemId === itemId);
+			if (idx === -1) return null;
+			const entry = invStore[idx];
+			if (entry.quantity <= 1) {
+				invStore.splice(idx, 1);
+				return { ...entry, quantity: 0 };
+			}
+			entry.quantity -= 1;
+			return entry;
+		},
+		consumeOne: async (_, __, itemId) => {
+			const idx = invStore.findIndex((i) => i.itemId === itemId);
+			if (idx === -1) return false;
+			const entry = invStore[idx];
+			if (entry.quantity <= 1) {
+				invStore.splice(idx, 1);
+			} else {
+				entry.quantity -= 1;
+			}
+			return true;
+		},
+	};
 
-  const walletRepo: WalletRepository = {
-    findByGuildAndUser: async () => walletState,
-    create: async (input) => { walletState = makeWallet({ guildId: input.guildId, userId: input.userId, balance: 0n }); return walletState; },
-    adjustBalance: async (_id, amount) => {
-      if (!walletState) throw new Error('no wallet');
-      walletState = { ...walletState, balance: walletState.balance + amount };
-      return walletState;
-    },
-    atomicTransfer: async () => { throw new Error('not stubbed'); },
-    updateCooldowns: async () => { if (!walletState) throw new Error('no wallet'); return walletState; },
-  };
+	const walletRepo: WalletRepository = {
+		findByGuildAndUser: async () => walletState,
+		create: async (input) => {
+			walletState = makeWallet({
+				guildId: input.guildId,
+				userId: input.userId,
+				balance: 0n,
+			});
+			return walletState;
+		},
+		adjustBalance: async (_id, amount) => {
+			if (!walletState) throw new Error("no wallet");
+			walletState = { ...walletState, balance: walletState.balance + amount };
+			return walletState;
+		},
+		tryDebit: async (_id, amount) => {
+			if (!walletState || walletState.balance < amount) return null;
+			walletState = { ...walletState, balance: walletState.balance - amount };
+			return walletState;
+		},
+		tryStampCooldown: async () => {
+			throw new Error("not stubbed");
+		},
+		atomicTransfer: async () => {
+			throw new Error("not stubbed");
+		},
+		updateCooldowns: async () => {
+			if (!walletState) throw new Error("no wallet");
+			return walletState;
+		},
+	};
 
-  const txRepo: TransactionRepository = {
-    create: async (input) => { const tx: TransactionDto = { id: `tx_${txs.length + 1}`, createdAt: NOW, ...input }; txs.push(tx); return tx; },
-    listByWallet: async () => txs,
-  };
+	const txRepo: TransactionRepository = {
+		create: async (input) => {
+			const tx: TransactionDto = {
+				id: `tx_${txs.length + 1}`,
+				createdAt: NOW,
+				...input,
+			};
+			txs.push(tx);
+			return tx;
+		},
+		listByWallet: async () => txs,
+	};
 
-  const bus: EventBus = { publish: async () => {} };
-  const logger: Logger = { info: () => {}, warn: () => {}, error: () => {} };
+	const bus: EventBus = { publish: async () => {} };
+	const logger: Logger = { info: () => {}, warn: () => {}, error: () => {} };
 
-  const svc = new ShopService(itemRepo, invRepo, walletRepo, txRepo, bus, logger);
-  return { svc, itemsStore, invStore, txs, getWallet: () => walletState };
+	const svc = new ShopService(
+		itemRepo,
+		invRepo,
+		walletRepo,
+		txRepo,
+		bus,
+		logger,
+	);
+	return { svc, itemsStore, invStore, txs, getWallet: () => walletState };
 }
 
 // ─── listItems ───────────────────────────────────────────────────────────────
 
-test('listItems — returns guild items', async () => {
-  const item = makeItem();
-  const { svc } = createHarness({ items: [item] });
+test("listItems — returns guild items", async () => {
+	const item = makeItem();
+	const { svc } = createHarness({ items: [item] });
 
-  const result = await svc.listItems('g');
-  assert.equal(result.length, 1);
-  assert.equal(result[0].id, 'item_1');
+	const result = await svc.listItems("g");
+	assert.equal(result.length, 1);
+	assert.equal(result[0].id, "item_1");
 });
 
-test('listItems — returns empty array when no items', async () => {
-  const { svc } = createHarness();
-  const result = await svc.listItems('g');
-  assert.equal(result.length, 0);
+test("listItems — returns empty array when no items", async () => {
+	const { svc } = createHarness();
+	const result = await svc.listItems("g");
+	assert.equal(result.length, 0);
 });
 
 // ─── buyItem ─────────────────────────────────────────────────────────────────
 
-test('buyItem — deducts balance including tax', async () => {
-  const item = makeItem({ price: 100n });
-  const { svc, getWallet, txs } = createHarness({ items: [item], wallet: makeWallet({ balance: 200n }) });
+test("buyItem — deducts balance including tax", async () => {
+	const item = makeItem({ price: 100n });
+	const { svc, getWallet, txs } = createHarness({
+		items: [item],
+		wallet: makeWallet({ balance: 200n }),
+	});
 
-  const result = await svc.buyItem('g', 'u', 'item_1', { shopTaxPercent: 10 });
-  assert.equal(result.totalPaid, 110n);
-  assert.equal(getWallet()?.balance, 90n);
-  assert.equal(txs.length, 1);
-  assert.equal(txs[0].amount, -110n);
+	const result = await svc.buyItem("g", "u", "item_1", { shopTaxPercent: 10 });
+	assert.equal(result.totalPaid, 110n);
+	assert.equal(getWallet()?.balance, 90n);
+	assert.equal(txs.length, 1);
+	assert.equal(txs[0].amount, -110n);
 });
 
-test('buyItem — adds item to inventory', async () => {
-  const item = makeItem({ price: 50n });
-  const { svc, invStore } = createHarness({ items: [item], wallet: makeWallet({ balance: 500n }) });
+test("buyItem — adds item to inventory", async () => {
+	const item = makeItem({ price: 50n });
+	const { svc, invStore } = createHarness({
+		items: [item],
+		wallet: makeWallet({ balance: 500n }),
+	});
 
-  await svc.buyItem('g', 'u', 'item_1', { shopTaxPercent: 0 });
-  assert.equal(invStore.length, 1);
-  assert.equal(invStore[0].itemId, 'item_1');
-  assert.equal(invStore[0].quantity, 1);
+	await svc.buyItem("g", "u", "item_1", { shopTaxPercent: 0 });
+	assert.equal(invStore.length, 1);
+	assert.equal(invStore[0].itemId, "item_1");
+	assert.equal(invStore[0].quantity, 1);
 });
 
-test('buyItem — throws NotFoundError for unknown item', async () => {
-  const { svc } = createHarness();
-  await assert.rejects(
-    () => svc.buyItem('g', 'u', 'nonexistent', { shopTaxPercent: 0 }),
-    (e) => { assert.ok(e instanceof NotFoundError); return true; }
-  );
+test("buyItem — throws NotFoundError for unknown item", async () => {
+	const { svc } = createHarness();
+	await assert.rejects(
+		() => svc.buyItem("g", "u", "nonexistent", { shopTaxPercent: 0 }),
+		(e) => {
+			assert.ok(e instanceof NotFoundError);
+			return true;
+		},
+	);
 });
 
-test('buyItem — throws ConflictError when out of stock', async () => {
-  const item = makeItem({ stock: 0 });
-  const { svc } = createHarness({ items: [item] });
+test("buyItem — throws ConflictError when out of stock", async () => {
+	const item = makeItem({ stock: 0 });
+	const { svc } = createHarness({ items: [item] });
 
-  await assert.rejects(
-    () => svc.buyItem('g', 'u', 'item_1', { shopTaxPercent: 0 }),
-    (e) => { assert.ok(e instanceof ConflictError); assert.equal((e as ConflictError).code, 'OUT_OF_STOCK'); return true; }
-  );
+	await assert.rejects(
+		() => svc.buyItem("g", "u", "item_1", { shopTaxPercent: 0 }),
+		(e) => {
+			assert.ok(e instanceof ConflictError);
+			assert.equal((e as ConflictError).code, "OUT_OF_STOCK");
+			return true;
+		},
+	);
 });
 
-test('buyItem — throws ConflictError on insufficient balance', async () => {
-  const item = makeItem({ price: 1000n });
-  const { svc } = createHarness({ items: [item], wallet: makeWallet({ balance: 10n }) });
+test("buyItem — throws ConflictError on insufficient balance", async () => {
+	const item = makeItem({ price: 1000n });
+	const { svc } = createHarness({
+		items: [item],
+		wallet: makeWallet({ balance: 10n }),
+	});
 
-  await assert.rejects(
-    () => svc.buyItem('g', 'u', 'item_1', { shopTaxPercent: 0 }),
-    (e) => { assert.ok(e instanceof ConflictError); assert.equal((e as ConflictError).code, 'INSUFFICIENT_BALANCE'); return true; }
-  );
+	await assert.rejects(
+		() => svc.buyItem("g", "u", "item_1", { shopTaxPercent: 0 }),
+		(e) => {
+			assert.ok(e instanceof ConflictError);
+			assert.equal((e as ConflictError).code, "INSUFFICIENT_BALANCE");
+			return true;
+		},
+	);
 });
 
-test('buyItem — decrements limited stock', async () => {
-  const item = makeItem({ price: 10n, stock: 5 });
-  const { svc, itemsStore } = createHarness({ items: [item], wallet: makeWallet({ balance: 500n }) });
+test("buyItem — decrements limited stock", async () => {
+	const item = makeItem({ price: 10n, stock: 5 });
+	const { svc, itemsStore } = createHarness({
+		items: [item],
+		wallet: makeWallet({ balance: 500n }),
+	});
 
-  await svc.buyItem('g', 'u', 'item_1', { shopTaxPercent: 0 });
-  assert.equal(itemsStore[0].stock, 4);
+	await svc.buyItem("g", "u", "item_1", { shopTaxPercent: 0 });
+	assert.equal(itemsStore[0].stock, 4);
 });
 
 // ─── sellItem ────────────────────────────────────────────────────────────────
 
-test('sellItem — refunds 50% of item price', async () => {
-  const item = makeItem({ price: 200n });
-  const invItem = makeInvItem(item);
-  const { svc, getWallet, txs } = createHarness({
-    items: [item],
-    wallet: makeWallet({ balance: 100n }),
-    invItems: [invItem],
-  });
+test("sellItem — refunds 50% of item price", async () => {
+	const item = makeItem({ price: 200n });
+	const invItem = makeInvItem(item);
+	const { svc, getWallet, txs } = createHarness({
+		items: [item],
+		wallet: makeWallet({ balance: 100n }),
+		invItems: [invItem],
+	});
 
-  const result = await svc.sellItem('g', 'u', 'item_1');
-  assert.equal(result.refund, 100n);
-  assert.equal(getWallet()?.balance, 200n);
-  assert.equal(txs.length, 1);
-  assert.equal(txs[0].amount, 100n);
+	const result = await svc.sellItem("g", "u", "item_1");
+	assert.equal(result.refund, 100n);
+	assert.equal(getWallet()?.balance, 200n);
+	assert.equal(txs.length, 1);
+	assert.equal(txs[0].amount, 100n);
 });
 
-test('sellItem — throws NotFoundError when item not in inventory', async () => {
-  const { svc } = createHarness();
-  await assert.rejects(
-    () => svc.sellItem('g', 'u', 'item_1'),
-    (e) => { assert.ok(e instanceof NotFoundError); return true; }
-  );
+test("sellItem — throws NotFoundError when item not in inventory", async () => {
+	const { svc } = createHarness();
+	await assert.rejects(
+		() => svc.sellItem("g", "u", "item_1"),
+		(e) => {
+			assert.ok(e instanceof NotFoundError);
+			return true;
+		},
+	);
 });
 
-test('sellItem — removes item from inventory', async () => {
-  const item = makeItem({ price: 100n });
-  const invItem = makeInvItem(item);
-  const { svc, invStore } = createHarness({ items: [item], wallet: makeWallet(), invItems: [invItem] });
+test("sellItem — removes item from inventory", async () => {
+	const item = makeItem({ price: 100n });
+	const invItem = makeInvItem(item);
+	const { svc, invStore } = createHarness({
+		items: [item],
+		wallet: makeWallet(),
+		invItems: [invItem],
+	});
 
-  await svc.sellItem('g', 'u', 'item_1');
-  assert.equal(invStore.length, 0);
+	await svc.sellItem("g", "u", "item_1");
+	assert.equal(invStore.length, 0);
 });
 
 // BUG-R1 regression: wallet=null caused item to be removed without payment
 // Fixed: sellItem now throws NotFoundError when wallet is missing
-test('sellItem — BUG-R1: throws NotFoundError when wallet missing, does not remove item', async () => {
-  const item = makeItem({ price: 200n });
-  const invItem = makeInvItem(item);
-  const { svc, invStore } = createHarness({ items: [item], wallet: null, invItems: [invItem] });
+test("sellItem — BUG-R1: throws NotFoundError when wallet missing, does not remove item", async () => {
+	const item = makeItem({ price: 200n });
+	const invItem = makeInvItem(item);
+	const { svc, invStore } = createHarness({
+		items: [item],
+		wallet: null,
+		invItems: [invItem],
+	});
 
-  await assert.rejects(
-    () => svc.sellItem('g', 'u', 'item_1'),
-    (e) => { assert.ok(e instanceof NotFoundError); return true; }
-  );
-  assert.equal(invStore.length, 1, 'item must not be removed when payment fails');
+	await assert.rejects(
+		() => svc.sellItem("g", "u", "item_1"),
+		(e) => {
+			assert.ok(e instanceof NotFoundError);
+			return true;
+		},
+	);
+	assert.equal(
+		invStore.length,
+		1,
+		"item must not be removed when payment fails",
+	);
+});
+
+// BUG-R2 regression: double-sell of a single item refunded twice (duplication).
+// Fixed: sellItem consumes one unit atomically BEFORE crediting; second sell fails.
+test("sellItem — BUG-R2: second sell of last unit throws, refund credited once", async () => {
+	const item = makeItem({ price: 200n });
+	const invItem = makeInvItem(item);
+	const { svc, getWallet, invStore } = createHarness({
+		items: [item],
+		wallet: makeWallet({ balance: 0n }),
+		invItems: [invItem],
+	});
+
+	await svc.sellItem("g", "u", "item_1");
+	await assert.rejects(
+		() => svc.sellItem("g", "u", "item_1"),
+		(e) => {
+			assert.ok(e instanceof NotFoundError);
+			return true;
+		},
+	);
+	assert.equal(getWallet()?.balance, 100n, "refund must be credited exactly once");
+	assert.equal(invStore.length, 0);
+});
+
+// BUG-R3 regression: two buys passing a stale balance check could overspend
+// into a negative balance. Fixed: buyItem reserves funds with an atomic tryDebit.
+test("buyItem — BUG-R3: second buy beyond balance throws, balance never goes negative", async () => {
+	const item = makeItem({ price: 100n });
+	const { svc, getWallet } = createHarness({
+		items: [item],
+		wallet: makeWallet({ balance: 100n }),
+	});
+
+	await svc.buyItem("g", "u", "item_1", { shopTaxPercent: 0 });
+	await assert.rejects(
+		() => svc.buyItem("g", "u", "item_1", { shopTaxPercent: 0 }),
+		(e) => {
+			assert.ok(e instanceof ConflictError);
+			assert.equal((e as ConflictError).code, "INSUFFICIENT_BALANCE");
+			return true;
+		},
+	);
+	assert.equal(getWallet()?.balance, 0n, "balance must not go negative");
 });
 
 // ─── createItem / deleteItem ──────────────────────────────────────────────────
 
-test('createItem — adds item to guild store', async () => {
-  const { svc, itemsStore } = createHarness();
+test("createItem — adds item to guild store", async () => {
+	const { svc, itemsStore } = createHarness();
 
-  const data: Omit<CreateItemDto, 'guildId'> = {
-    name: 'Sword',
-    description: 'Sharp',
-    price: 500n,
-    emoji: '⚔️',
-    type: 'cosmetic',
-    effect: null,
-    stock: null,
-  };
-  const item = await svc.createItem('g', data);
-  assert.equal(item.name, 'Sword');
-  assert.equal(item.guildId, 'g');
-  assert.equal(itemsStore.length, 1);
+	const data: Omit<CreateItemDto, "guildId"> = {
+		name: "Sword",
+		description: "Sharp",
+		price: 500n,
+		emoji: "⚔️",
+		type: "cosmetic",
+		effect: null,
+		stock: null,
+	};
+	const item = await svc.createItem("g", data);
+	assert.equal(item.name, "Sword");
+	assert.equal(item.guildId, "g");
+	assert.equal(itemsStore.length, 1);
 });
 
-test('deleteItem — removes item from store', async () => {
-  const item = makeItem();
-  const { svc, itemsStore } = createHarness({ items: [item] });
+test("deleteItem — removes item from store", async () => {
+	const item = makeItem();
+	const { svc, itemsStore } = createHarness({ items: [item] });
 
-  await svc.deleteItem('g', 'item_1');
-  assert.equal(itemsStore.length, 0);
+	await svc.deleteItem("g", "item_1");
+	assert.equal(itemsStore.length, 0);
 });
 
-test('deleteItem — throws NotFoundError for unknown item', async () => {
-  const { svc } = createHarness();
-  await assert.rejects(
-    () => svc.deleteItem('g', 'nonexistent'),
-    (e) => { assert.ok(e instanceof NotFoundError); return true; }
-  );
+test("deleteItem — throws NotFoundError for unknown item", async () => {
+	const { svc } = createHarness();
+	await assert.rejects(
+		() => svc.deleteItem("g", "nonexistent"),
+		(e) => {
+			assert.ok(e instanceof NotFoundError);
+			return true;
+		},
+	);
 });
