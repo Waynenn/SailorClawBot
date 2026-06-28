@@ -16,7 +16,6 @@ import {
 import {
 	type BlackjackSession,
 	bjButtons,
-	bjSessions,
 	buildBjEmbed,
 	dealerPlay,
 	handValue,
@@ -44,7 +43,9 @@ import {
 
 const PAGE_SIZE = 10;
 
-async function resolveBlackjack(
+// Compute the payout and render the result. The caller MUST have already
+// captured (deleted) the session via deleteCapture, so this never double-pays.
+async function settleBlackjack(
 	interaction: ButtonInteraction,
 	container: Container,
 	session: BlackjackSession,
@@ -53,7 +54,6 @@ async function resolveBlackjack(
 	const playerVal = handValue(session.playerCards);
 	const dealerVal = handValue(session.dealerCards);
 	const { userId, bet } = session;
-	bjSessions.delete(session.id);
 
 	let footer: string;
 	if (playerVal > 21) {
@@ -82,6 +82,17 @@ async function resolveBlackjack(
 	await interaction.update({ embeds: [embed], components: [] });
 }
 
+async function expireBlackjack(interaction: ButtonInteraction): Promise<void> {
+	await interaction
+		.update({
+			content:
+				"Session expired — your bet was refunded if it was still active. Start a new game with `/blackjack`.",
+			embeds: [],
+			components: [],
+		})
+		.catch(() => null);
+}
+
 async function handleBlackjackButton(
 	interaction: ButtonInteraction,
 	container: Container,
@@ -91,6 +102,7 @@ async function handleBlackjackButton(
 	const action = parts[1];
 	const userId = parts[2];
 	const sessionId = `bj_${interaction.guildId!}_${userId}`;
+	const repo = container.blackjackSessionRepo;
 
 	if (interaction.user.id !== userId) {
 		await interaction.reply({
@@ -100,14 +112,9 @@ async function handleBlackjackButton(
 		return;
 	}
 
-	const session = bjSessions.get(sessionId);
+	const session = await repo.findById(sessionId);
 	if (!session) {
-		await interaction.update({
-			content:
-				"Session expired — your bet was refunded. Start a new game with `/blackjack`.",
-			embeds: [],
-			components: [],
-		});
+		await expireBlackjack(interaction);
 		return;
 	}
 
@@ -117,21 +124,23 @@ async function handleBlackjackButton(
 		session.playerCards.push(session.deck.pop()!);
 		const playerVal = handValue(session.playerCards);
 
-		if (playerVal > 21) {
-			bjSessions.delete(sessionId);
-			const embed = buildBjEmbed(session, {
-				footer: `Bust! Lost ${session.bet.toLocaleString()} coins.`,
-			});
-			await interaction.update({ embeds: [embed], components: [] });
+		if (playerVal >= 21) {
+			// Bust or 21 — both terminal. Claim the session, then settle.
+			if (playerVal === 21) dealerPlay(session);
+			const claimed = await repo.deleteCapture(sessionId);
+			if (!claimed) {
+				await expireBlackjack(interaction);
+				return;
+			}
+			await settleBlackjack(interaction, container, session, guildId);
 			return;
 		}
 
-		if (playerVal === 21) {
-			dealerPlay(session);
-			await resolveBlackjack(interaction, container, session, guildId);
-			return;
-		}
-
+		// Non-terminal: persist the new card/deck and keep playing.
+		await repo.update(sessionId, {
+			playerCards: session.playerCards,
+			deck: session.deck,
+		});
 		const embed = buildBjEmbed(session, { hideDealer: true });
 		await interaction.update({
 			embeds: [embed],
@@ -139,15 +148,25 @@ async function handleBlackjackButton(
 		});
 	} else if (action === "stand") {
 		dealerPlay(session);
-		await resolveBlackjack(interaction, container, session, guildId);
+		const claimed = await repo.deleteCapture(sessionId);
+		if (!claimed) {
+			await expireBlackjack(interaction);
+			return;
+		}
+		await settleBlackjack(interaction, container, session, guildId);
 	} else if (action === "double") {
-		// Remove session before any await to prevent concurrent double-processing
-		bjSessions.delete(sessionId);
+		// Claim the session before any side effect to prevent concurrent
+		// double-processing of the same hand.
+		const claimed = await repo.deleteCapture(sessionId);
+		if (!claimed) {
+			await expireBlackjack(interaction);
+			return;
+		}
 		const wallet = await container.economyService.ensureWallet(guildId, userId);
 		if (wallet.balance < session.bet) {
-			// Not enough to double — fall back to stand
+			// Not enough to double — fall back to stand.
 			dealerPlay(session);
-			await resolveBlackjack(interaction, container, session, guildId);
+			await settleBlackjack(interaction, container, session, guildId);
 			return;
 		}
 		await container.economyService.withdraw(
@@ -159,7 +178,7 @@ async function handleBlackjackButton(
 		session.bet *= 2n;
 		session.playerCards.push(session.deck.pop()!);
 		dealerPlay(session);
-		await resolveBlackjack(interaction, container, session, guildId);
+		await settleBlackjack(interaction, container, session, guildId);
 	}
 }
 

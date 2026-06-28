@@ -1,248 +1,285 @@
 export type SnowflakeId = string;
 
-export * from './moderation.js';
+export * from "./moderation.js";
 
 export interface GuildSettingsDto {
-  guildId: string;
-  // Welcome / Leave
-  welcomeChannelId: string | null;
-  welcomeMessage: string | null;
-  leaveChannelId: string | null;
-  leaveMessage: string | null;
-  welcomeDm: boolean;
-  // Logging
-  logChannelId: string | null;
-  xpEnabled: boolean;
-  xpMin: number;
-  xpMax: number;
-  xpCooldown: number;
-  levelUpChannelId: string | null;
-  levelUpDm: boolean;
-  levelUpMessage: string | null;
-  locale: string;
-  // Economy
-  currencyName: string;
-  currencyEmoji: string;
-  dailyAmount: bigint;
-  startingBalance: bigint;
-  workMin: bigint;
-  workMax: bigint;
-  crimeMin: bigint;
-  crimeMax: bigint;
-  gamblingMinBet: bigint;
-  gamblingMaxBet: bigint;
-  robMinTargetBalance: bigint;
-  transferTaxPercent: number;
-  shopTaxPercent: number;
-  dailyWorkLimit: number;
-  dailyCrimeLimit: number;
-  workDiminishingFactor: number;
-  crimeDiminishingFactor: number;
-  // Tickets
-  ticketChannelId: string | null;
-  ticketCategoryId: string | null;
-  ticketStatsMessageId: string | null;
-  ticketLogChannelId: string | null;
-  // Anti-raid & Verification
-  verificationEnabled: boolean;
-  verificationMode: string;
-  verificationRoleId: string | null;
-  minAccountAgeDays: number;
-  raidJoinsPerMinute: number;
-  raidAutoLock: boolean;
-  // Starboard
-  starboardEnabled: boolean;
-  starboardChannelId: string | null;
-  starboardThreshold: number;
-  // Logging event filter
-  logEvents: string[];
-  logIgnoredChannels: string[];
-  logChannelOverrides: Record<string, string>;
-  // Moderation
-  muteRoleId: string | null;
+	guildId: string;
+	// Welcome / Leave
+	welcomeChannelId: string | null;
+	welcomeMessage: string | null;
+	leaveChannelId: string | null;
+	leaveMessage: string | null;
+	welcomeDm: boolean;
+	// Logging
+	logChannelId: string | null;
+	xpEnabled: boolean;
+	xpMin: number;
+	xpMax: number;
+	xpCooldown: number;
+	levelUpChannelId: string | null;
+	levelUpDm: boolean;
+	levelUpMessage: string | null;
+	locale: string;
+	// Economy
+	currencyName: string;
+	currencyEmoji: string;
+	dailyAmount: bigint;
+	startingBalance: bigint;
+	workMin: bigint;
+	workMax: bigint;
+	crimeMin: bigint;
+	crimeMax: bigint;
+	gamblingMinBet: bigint;
+	gamblingMaxBet: bigint;
+	robMinTargetBalance: bigint;
+	transferTaxPercent: number;
+	shopTaxPercent: number;
+	dailyWorkLimit: number;
+	dailyCrimeLimit: number;
+	workDiminishingFactor: number;
+	crimeDiminishingFactor: number;
+	// Tickets
+	ticketChannelId: string | null;
+	ticketCategoryId: string | null;
+	ticketStatsMessageId: string | null;
+	ticketLogChannelId: string | null;
+	// Anti-raid & Verification
+	verificationEnabled: boolean;
+	verificationMode: string;
+	verificationRoleId: string | null;
+	minAccountAgeDays: number;
+	raidJoinsPerMinute: number;
+	raidAutoLock: boolean;
+	// Starboard
+	starboardEnabled: boolean;
+	starboardChannelId: string | null;
+	starboardThreshold: number;
+	// Logging event filter
+	logEvents: string[];
+	logIgnoredChannels: string[];
+	logChannelOverrides: Record<string, string>;
+	// Moderation
+	muteRoleId: string | null;
 }
 
 export interface TwitchSubscriptionDto {
-  id: string;
-  guildId: string;
-  twitchLogin: string;
-  notifyChannelId: string;
-  mentionRoleId: string | null;
-  customMessage: string | null;
-  lastStreamId: string | null;
-  createdAt: Date;
+	id: string;
+	guildId: string;
+	twitchLogin: string;
+	notifyChannelId: string;
+	mentionRoleId: string | null;
+	customMessage: string | null;
+	lastStreamId: string | null;
+	createdAt: Date;
 }
 
 export interface GuildDto {
-  id: SnowflakeId;
-  name: string;
-  createdAt: Date;
-  updatedAt: Date;
+	id: SnowflakeId;
+	name: string;
+	createdAt: Date;
+	updatedAt: Date;
 }
 
 export interface GuildMemberDto {
-  guildId: SnowflakeId;
-  userId: SnowflakeId;
-  joinedAt: Date;
+	guildId: SnowflakeId;
+	userId: SnowflakeId;
+	joinedAt: Date;
 }
 
 export interface ProfileDto {
-  id: string;
-  guildId: SnowflakeId;
-  userId: SnowflakeId;
-  displayName: string | null;
-  xp: number;
-  level: number;
-  totalXp: number;
-  createdAt: Date;
-  updatedAt: Date;
+	id: string;
+	guildId: SnowflakeId;
+	userId: SnowflakeId;
+	displayName: string | null;
+	xp: number;
+	level: number;
+	totalXp: number;
+	createdAt: Date;
+	updatedAt: Date;
 }
 
 export interface LevelRoleDto {
-  id: string;
-  guildId: string;
-  level: number;
-  roleId: string;
+	id: string;
+	guildId: string;
+	level: number;
+	roleId: string;
 }
 
 export interface XpMultiplierDto {
-  id: string;
-  guildId: string;
-  targetId: string;
-  targetType: 'channel' | 'role';
-  multiplier: number;
+	id: string;
+	guildId: string;
+	targetId: string;
+	targetType: "channel" | "role";
+	multiplier: number;
 }
 
 export interface NoXpTargetDto {
-  id: string;
-  guildId: string;
-  targetId: string;
-  targetType: 'channel' | 'role';
+	id: string;
+	guildId: string;
+	targetId: string;
+	targetType: "channel" | "role";
 }
 
 export interface WalletDto {
-  id: string;
-  guildId: SnowflakeId;
-  userId: SnowflakeId;
-  balance: bigint;
-  lastDailyAt: Date | null;
-  lastWorkAt: Date | null;
-  lastCrimeAt: Date | null;
-  lastRobAt: Date | null;
-  workUsesToday: number;
-  crimeUsesToday: number;
-  dailyLimitReset: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
+	id: string;
+	guildId: SnowflakeId;
+	userId: SnowflakeId;
+	balance: bigint;
+	lastDailyAt: Date | null;
+	lastWorkAt: Date | null;
+	lastCrimeAt: Date | null;
+	lastRobAt: Date | null;
+	workUsesToday: number;
+	crimeUsesToday: number;
+	dailyLimitReset: Date | null;
+	createdAt: Date;
+	updatedAt: Date;
 }
 
 export interface TransactionDto {
-  id: string;
-  walletId: string;
-  amount: bigint;
-  reason: string;
-  createdAt: Date;
+	id: string;
+	walletId: string;
+	amount: bigint;
+	reason: string;
+	createdAt: Date;
 }
 
 export interface ItemDto {
-  id: string;
-  guildId: string;
-  name: string;
-  description: string | null;
-  price: bigint;
-  emoji: string | null;
-  type: string;
-  effect: unknown | null;
-  stock: number | null;
-  createdAt: Date;
+	id: string;
+	guildId: string;
+	name: string;
+	description: string | null;
+	price: bigint;
+	emoji: string | null;
+	type: string;
+	effect: unknown | null;
+	stock: number | null;
+	createdAt: Date;
 }
 
 export interface CreateItemDto {
-  guildId: string;
-  name: string;
-  description?: string | null;
-  price: bigint;
-  emoji?: string | null;
-  type: string;
-  effect?: unknown | null;
-  stock?: number | null;
+	guildId: string;
+	name: string;
+	description?: string | null;
+	price: bigint;
+	emoji?: string | null;
+	type: string;
+	effect?: unknown | null;
+	stock?: number | null;
 }
 
 export interface InventoryItemDto {
-  id: string;
-  guildId: string;
-  userId: string;
-  itemId: string;
-  quantity: number;
-  acquiredAt: Date;
-  item?: ItemDto;
+	id: string;
+	guildId: string;
+	userId: string;
+	itemId: string;
+	quantity: number;
+	acquiredAt: Date;
+	item?: ItemDto;
 }
 
 export interface FamilyDto {
-  id: string;
-  guildId: SnowflakeId;
-  name: string;
-  ownerUserId: SnowflakeId;
-  createdAt: Date;
-  updatedAt: Date;
+	id: string;
+	guildId: SnowflakeId;
+	name: string;
+	ownerUserId: SnowflakeId;
+	createdAt: Date;
+	updatedAt: Date;
+}
+
+export type FamilyRole = "OWNER" | "OFFICER" | "MEMBER";
+
+export interface FamilyMemberDto {
+	id: string;
+	guildId: SnowflakeId;
+	familyId: string;
+	userId: SnowflakeId;
+	role: FamilyRole;
+	joinedAt: Date;
+}
+
+export interface FamilyLeaderboardEntry {
+	familyId: string;
+	name: string;
+	ownerUserId: SnowflakeId;
+	memberCount: number;
+	totalXp: number;
 }
 
 export interface TicketDto {
-  id: string;
-  guildId: SnowflakeId;
-  openedByUserId: SnowflakeId;
-  channelId: SnowflakeId | null;
-  claimedById: SnowflakeId | null;
-  claimedAt: Date | null;
-  closedById: SnowflakeId | null;
-  rating: number | null;
-  subject: string | null;
-  status: 'open' | 'claimed' | 'closed';
-  createdAt: Date;
-  updatedAt: Date;
+	id: string;
+	guildId: SnowflakeId;
+	openedByUserId: SnowflakeId;
+	channelId: SnowflakeId | null;
+	claimedById: SnowflakeId | null;
+	claimedAt: Date | null;
+	closedById: SnowflakeId | null;
+	rating: number | null;
+	subject: string | null;
+	status: "open" | "claimed" | "closed";
+	createdAt: Date;
+	updatedAt: Date;
 }
 
 export interface StaffNoteDto {
-  id: string;
-  guildId: string;
-  userId: string;
-  authorId: string;
-  content: string;
-  createdAt: Date;
+	id: string;
+	guildId: string;
+	userId: string;
+	authorId: string;
+	content: string;
+	createdAt: Date;
 }
 
 export interface ReactionRoleDto {
-  id: string;
-  guildId: string;
-  messageId: string;
-  channelId: string;
-  emoji: string;
-  roleId: string;
+	id: string;
+	guildId: string;
+	messageId: string;
+	channelId: string;
+	emoji: string;
+	roleId: string;
 }
 
 export interface GiveawayDto {
-  id: string;
-  guildId: string;
-  channelId: string;
-  messageId: string | null;
-  prize: string;
-  winnersCount: number;
-  endsAt: Date;
-  endedAt: Date | null;
-  hostId: string;
-  participants: string[];
-  winners: string[];
-  requiredRoleId: string | null;
-  boosterOnly: boolean;
-  minLevel: number | null;
+	id: string;
+	guildId: string;
+	channelId: string;
+	messageId: string | null;
+	prize: string;
+	winnersCount: number;
+	endsAt: Date;
+	endedAt: Date | null;
+	hostId: string;
+	participants: string[];
+	winners: string[];
+	requiredRoleId: string | null;
+	boosterOnly: boolean;
+	minLevel: number | null;
+}
+
+export interface BlackjackCard {
+	rank: string;
+	suit: string;
+	value: number;
+}
+
+export interface BlackjackSessionDto {
+	id: string;
+	guildId: SnowflakeId;
+	userId: SnowflakeId;
+	walletId: string;
+	bet: bigint;
+	playerCards: BlackjackCard[];
+	dealerCards: BlackjackCard[];
+	deck: BlackjackCard[];
+	createdAt: Date;
 }
 
 export interface StarboardEntryDto {
-  id: string;
-  guildId: string;
-  originalMsgId: string;
-  starboardMsgId: string;
-  authorId: string;
-  channelId: string;
-  starCount: number;
+	id: string;
+	guildId: string;
+	originalMsgId: string;
+	starboardMsgId: string;
+	authorId: string;
+	channelId: string;
+	starCount: number;
 }

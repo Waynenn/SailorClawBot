@@ -289,6 +289,20 @@ model InventoryItem {
   @@index([guildId, userId])
 }
 
+model BlackjackSession {
+  id          String   @id // bj_{guildId}_{userId}
+  guildId     String
+  userId      String
+  walletId    String
+  bet         BigInt
+  playerCards Json // BlackjackCard[]
+  dealerCards Json // BlackjackCard[]
+  deck        Json // BlackjackCard[]
+  createdAt   DateTime @default(now())
+
+  @@index([guildId, userId])
+}
+
 // ============================================================================
 // FAMILY / CLAN
 // ============================================================================

@@ -4,7 +4,7 @@ import { Client, Collection, GatewayIntentBits, Partials } from "discord.js";
 import { balanceCommand } from "./commands/economy/balance.js";
 import {
 	blackjackCommand,
-	refundAllSessions,
+	recoverSessions,
 	startSessionCleaner,
 } from "./commands/economy/blackjack.js";
 import { buyCommand } from "./commands/economy/buy.js";
@@ -169,18 +169,18 @@ export async function startBot(): Promise<void> {
 	startAutoModCleanup();
 	startTicketCleaner(client, container);
 
-	// Graceful shutdown: refund any in-flight blackjack bets before exiting so a
-	// deploy/restart doesn't silently burn player stakes held in memory.
+	// Recover blackjack sessions persisted by a previous process. Bets are
+	// debited at deal time and the session lives in the DB, so an unclean exit
+	// (crash/kill -9) leaves orphaned rows — refund and clear them on startup.
+	void recoverSessions(container).catch((err) => Sentry.captureException(err));
+
+	// Graceful shutdown: sessions persist in the DB and are refunded by startup
+	// recovery, so we only need to close the Discord client cleanly here.
 	let shuttingDown = false;
 	const shutdown = async (signal: string): Promise<void> => {
 		if (shuttingDown) return;
 		shuttingDown = true;
 		logger.info("Shutting down", { signal });
-		try {
-			await refundAllSessions(container);
-		} catch (err) {
-			Sentry.captureException(err);
-		}
 		await client.destroy();
 		process.exit(0);
 	};

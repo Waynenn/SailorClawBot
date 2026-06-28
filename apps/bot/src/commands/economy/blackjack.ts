@@ -1,3 +1,4 @@
+import type { BlackjackCard, BlackjackSessionDto } from "@sailorclawbot/contracts";
 import type { ChatInputCommandInteraction } from "discord.js";
 import {
 	ActionRowBuilder,
@@ -11,33 +12,18 @@ import { EMBED_COLORS } from "../../lib/embedColors.js";
 import { handleCommandError } from "../../middleware/errorHandler.js";
 import type { Command } from "../index.js";
 
-// ─── Types & shared session state ────────────────────────────────────────────
+// ─── Types & session state ───────────────────────────────────────────────────
+// Sessions are persisted in the DB (BlackjackSessionRepository) so an unclean
+// exit (kill -9, OOM, crash) can't silently burn the debited stake — startup
+// recovery refunds any orphaned session.
 
-export interface Card {
-	rank: string;
-	suit: string;
-	value: number;
-}
-
-export interface BlackjackSession {
-	id: string;
-	guildId: string;
-	userId: string;
-	walletId: string;
-	bet: bigint;
-	playerCards: Card[];
-	dealerCards: Card[];
-	deck: Card[];
-	createdAt: number;
-}
-
-export const bjSessions = new Map<string, BlackjackSession>();
+export type Card = BlackjackCard;
+export type BlackjackSession = BlackjackSessionDto;
 
 const SESSION_TTL_MS = 15 * 60 * 1000;
 
 // Return an abandoned bet to the player. The bet was debited at deal time, so a
-// session that is dropped without resolving (TTL expiry or shutdown) must refund
-// it — otherwise the stake is silently lost.
+// session removed without resolving (TTL expiry or crash recovery) must refund.
 async function refundSession(
 	container: Container,
 	session: BlackjackSession,
@@ -54,33 +40,49 @@ async function refundSession(
 export function startSessionCleaner(container: Container): void {
 	setInterval(
 		() => {
-			const cutoff = Date.now() - SESSION_TTL_MS;
-			for (const [key, session] of bjSessions) {
-				// Map.delete returns true only for the caller that actually removed the
-				// entry, so a concurrent resolve and this cleaner can't double-refund.
-				if (session.createdAt < cutoff && bjSessions.delete(key)) {
-					void refundSession(
-						container,
-						session,
-						"Blackjack refund (session expired)",
-					).catch(() => null);
+			void (async () => {
+				const cutoff = new Date(Date.now() - SESSION_TTL_MS);
+				const stale = await container.blackjackSessionRepo
+					.findStale(cutoff)
+					.catch(() => []);
+				for (const session of stale) {
+					// deleteCapture returns the row only for the caller that actually
+					// removed it, so a concurrent resolve and this cleaner can't both
+					// refund the same bet.
+					const captured = await container.blackjackSessionRepo
+						.deleteCapture(session.id)
+						.catch(() => null);
+					if (captured) {
+						await refundSession(
+							container,
+							captured,
+							"Blackjack refund (session expired)",
+						).catch(() => null);
+					}
 				}
-			}
+			})();
 		},
 		5 * 60 * 1000,
 	).unref();
 }
 
-// Refund every in-flight bet on graceful shutdown so a deploy/restart doesn't
-// burn stakes held only in this in-memory map.
-export async function refundAllSessions(container: Container): Promise<void> {
-	const pending = [...bjSessions.values()];
-	bjSessions.clear();
-	await Promise.allSettled(
-		pending.map((s) =>
-			refundSession(container, s, "Blackjack refund (bot shutdown)"),
-		),
-	);
+// On startup, refund every persisted session left over from a previous process.
+// We can't restore the interactive UI, so the safe action is to return the stake
+// and clear the row. The deleteCapture gate keeps this idempotent across races.
+export async function recoverSessions(container: Container): Promise<void> {
+	const orphaned = await container.blackjackSessionRepo.findAll().catch(() => []);
+	for (const session of orphaned) {
+		const captured = await container.blackjackSessionRepo
+			.deleteCapture(session.id)
+			.catch(() => null);
+		if (captured) {
+			await refundSession(
+				container,
+				captured,
+				"Blackjack refund (recovered after restart)",
+			).catch(() => null);
+		}
+	}
 }
 
 // ─── Card helpers ─────────────────────────────────────────────────────────────
@@ -236,7 +238,7 @@ export const blackjackCommand: Command = {
 			}
 
 			const sessionKey = `bj_${guildId}_${userId}`;
-			if (bjSessions.has(sessionKey)) {
+			if (await container.blackjackSessionRepo.findById(sessionKey)) {
 				await interaction.editReply(
 					"You already have an active blackjack game! Finish it first.",
 				);
@@ -271,7 +273,7 @@ export const blackjackCommand: Command = {
 				playerCards: [deck.pop()!, deck.pop()!],
 				dealerCards: [deck.pop()!, deck.pop()!],
 				deck,
-				createdAt: Date.now(),
+				createdAt: new Date(),
 			};
 
 			const playerVal = handValue(session.playerCards);
@@ -310,7 +312,7 @@ export const blackjackCommand: Command = {
 				return;
 			}
 
-			bjSessions.set(session.id, session);
+			await container.blackjackSessionRepo.create(session);
 			const canDouble = wallet.balance - amount >= amount;
 			const embed = buildBjEmbed(session, { hideDealer: true });
 			await interaction.editReply({
