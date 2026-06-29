@@ -124,7 +124,12 @@ function buildContainer() {
 	);
 	const inventoryService = new InventoryService(inventoryItemRepo, logger);
 	const ticketService = new TicketService(ticketRepo, eventBus, logger);
-	const familyService = new FamilyService(familyRepo, logger);
+	const familyService = new FamilyService(
+		familyRepo,
+		guildSettingsRepo,
+		walletRepo,
+		logger,
+	);
 	const permissionService = new PermissionService(
 		permissionRepo,
 		roleMappingRepo,

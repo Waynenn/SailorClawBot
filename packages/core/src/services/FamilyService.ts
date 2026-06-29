@@ -1,9 +1,12 @@
 import type {
 	FamilyDto,
+	FamilyJoinRequestDto,
 	FamilyLeaderboardEntry,
 	FamilyMemberDto,
 	FamilyRepository,
+	GuildSettingsRepository,
 	SnowflakeId,
+	WalletRepository,
 } from "@sailorclawbot/contracts";
 import { ConflictError } from "../common/errors/ConflictError.js";
 import { NotFoundError } from "../common/errors/NotFoundError.js";
@@ -15,15 +18,40 @@ export const FAMILY_NAME_MIN = 2;
 export const FAMILY_NAME_MAX = 32;
 export const FAMILY_MAX_MEMBERS = 25;
 export const FAMILY_LEADERBOARD_LIMIT = 10;
+const LEADERBOARD_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export interface FamilyWithMembers {
 	family: FamilyDto;
 	members: FamilyMemberDto[];
 }
 
+/** Effective per-guild family settings, with hard fallbacks when no row exists. */
+interface ResolvedFamilySettings {
+	creationEnabled: boolean;
+	maxFamilies: number | null;
+	maxMembers: number;
+	requireApproval: boolean;
+	creationMode: string;
+	creationCost: bigint;
+	nameChangeCost: bigint;
+}
+
+export interface JoinResult {
+	status: "joined" | "pending";
+	member?: FamilyMemberDto;
+	request?: FamilyJoinRequestDto;
+}
+
 export class FamilyService {
+	private readonly leaderboardCache = new Map<
+		string,
+		{ entries: FamilyLeaderboardEntry[]; expiresAt: number }
+	>();
+
 	public constructor(
 		private readonly families: FamilyRepository,
+		private readonly settings: GuildSettingsRepository,
+		private readonly wallets: WalletRepository,
 		private readonly logger: Logger,
 	) {}
 
@@ -69,7 +97,31 @@ export class FamilyService {
 		guildId: SnowflakeId,
 		limit: number = FAMILY_LEADERBOARD_LIMIT,
 	): Promise<FamilyLeaderboardEntry[]> {
-		return this.families.leaderboard(guildId, limit);
+		const cached = this.leaderboardCache.get(guildId);
+		if (cached && cached.expiresAt > Date.now()) {
+			return cached.entries.slice(0, limit);
+		}
+		const entries = await this.families.leaderboard(
+			guildId,
+			FAMILY_LEADERBOARD_LIMIT,
+		);
+		this.leaderboardCache.set(guildId, {
+			entries,
+			expiresAt: Date.now() + LEADERBOARD_CACHE_TTL_MS,
+		});
+		return entries.slice(0, limit);
+	}
+
+	public async listJoinRequests(
+		guildId: SnowflakeId,
+		actorUserId: SnowflakeId,
+	): Promise<FamilyJoinRequestDto[]> {
+		const { family, membership } = await this.requireMembership(
+			guildId,
+			actorUserId,
+		);
+		this.requireRank(membership, ["OWNER", "OFFICER"], "view join requests");
+		return this.families.listJoinRequests(family.id);
 	}
 
 	// ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -80,6 +132,14 @@ export class FamilyService {
 		ownerUserId: SnowflakeId,
 	): Promise<FamilyDto> {
 		const cleanName = this.validateName(name);
+		const cfg = await this.resolveSettings(guildId);
+
+		if (!cfg.creationEnabled) {
+			throw new ConflictError(
+				"Family creation is disabled on this server",
+				"FAMILY_CREATION_DISABLED",
+			);
+		}
 
 		const existingMembership = await this.families.findMemberByUser(
 			guildId,
@@ -91,6 +151,17 @@ export class FamilyService {
 				"ALREADY_IN_FAMILY",
 			);
 		}
+
+		if (cfg.maxFamilies !== null) {
+			const families = await this.families.listByGuild(guildId);
+			if (families.length >= cfg.maxFamilies) {
+				throw new ConflictError(
+					`This server has reached its family limit (${cfg.maxFamilies})`,
+					"MAX_FAMILIES_REACHED",
+				);
+			}
+		}
+
 		const nameTaken = await this.families.findByName(guildId, cleanName);
 		if (nameTaken) {
 			throw new ConflictError(
@@ -99,18 +170,28 @@ export class FamilyService {
 			);
 		}
 
-		const family = await this.families.create({
-			guildId,
-			name: cleanName,
-			ownerUserId,
-		});
-		this.logger.info("Family created", {
-			guildId,
-			name: cleanName,
-			ownerUserId,
-			familyId: family.id,
-		});
-		return family;
+		const cost = this.coinCost(cfg, cfg.creationCost);
+		if (cost > 0n) await this.charge(guildId, ownerUserId, cost);
+
+		try {
+			const family = await this.families.create({
+				guildId,
+				name: cleanName,
+				ownerUserId,
+			});
+			this.invalidateLeaderboard(guildId);
+			this.logger.info("Family created", {
+				guildId,
+				name: cleanName,
+				ownerUserId,
+				familyId: family.id,
+				cost: cost.toString(),
+			});
+			return family;
+		} catch (error) {
+			if (cost > 0n) await this.refund(guildId, ownerUserId, cost);
+			throw error;
+		}
 	}
 
 	public async disbandFamily(
@@ -147,14 +228,25 @@ export class FamilyService {
 			);
 		}
 
-		const updated = await this.families.rename(family.id, cleanName);
-		this.logger.info("Family renamed", {
-			guildId,
-			familyId: family.id,
-			newName: cleanName,
-			actorUserId,
-		});
-		return updated;
+		const cfg = await this.resolveSettings(guildId);
+		const cost = cfg.nameChangeCost > 0n ? cfg.nameChangeCost : 0n;
+		if (cost > 0n) await this.charge(guildId, actorUserId, cost);
+
+		try {
+			const updated = await this.families.rename(family.id, cleanName);
+			this.invalidateLeaderboard(guildId);
+			this.logger.info("Family renamed", {
+				guildId,
+				familyId: family.id,
+				newName: cleanName,
+				actorUserId,
+				cost: cost.toString(),
+			});
+			return updated;
+		} catch (error) {
+			if (cost > 0n) await this.refund(guildId, actorUserId, cost);
+			throw error;
+		}
 	}
 
 	// ── Membership ──────────────────────────────────────────────────────────────
@@ -181,19 +273,16 @@ export class FamilyService {
 			);
 		}
 
-		const count = await this.families.countMembers(family.id);
-		if (count >= FAMILY_MAX_MEMBERS) {
-			throw new ConflictError(
-				`Family is full (max ${FAMILY_MAX_MEMBERS} members)`,
-				"FAMILY_FULL",
-			);
-		}
+		const cfg = await this.resolveSettings(guildId);
+		await this.assertHasCapacity(family.id, cfg.maxMembers);
 
 		const added = await this.families.addMember({
 			guildId,
 			familyId: family.id,
 			userId: targetUserId,
 		});
+		await this.families.deleteJoinRequestsForUser(guildId, targetUserId);
+		this.invalidateLeaderboard(guildId);
 		this.logger.info("Family member added", {
 			guildId,
 			familyId: family.id,
@@ -344,7 +433,208 @@ export class FamilyService {
 		return updated;
 	}
 
+	// ── Join requests (self-service) ────────────────────────────────────────────
+
+	public async requestJoin(
+		guildId: SnowflakeId,
+		userId: SnowflakeId,
+		familyName: string,
+	): Promise<JoinResult> {
+		const existing = await this.families.findMemberByUser(guildId, userId);
+		if (existing) {
+			throw new ConflictError(
+				"You are already in a family",
+				"ALREADY_IN_FAMILY",
+			);
+		}
+
+		const family = await this.families.findByName(guildId, familyName.trim());
+		if (!family) {
+			throw new NotFoundError("No family with that name", "Family");
+		}
+
+		const cfg = await this.resolveSettings(guildId);
+		await this.assertHasCapacity(family.id, cfg.maxMembers);
+
+		if (!cfg.requireApproval) {
+			const member = await this.families.addMember({
+				guildId,
+				familyId: family.id,
+				userId,
+			});
+			await this.families.deleteJoinRequestsForUser(guildId, userId);
+			this.invalidateLeaderboard(guildId);
+			this.logger.info("Family joined", { guildId, familyId: family.id, userId });
+			return { status: "joined", member };
+		}
+
+		const pending = await this.families.findJoinRequest(family.id, userId);
+		if (pending) {
+			throw new ConflictError(
+				"You already have a pending request for this family",
+				"ALREADY_REQUESTED",
+			);
+		}
+		const request = await this.families.createJoinRequest({
+			guildId,
+			familyId: family.id,
+			userId,
+		});
+		this.logger.info("Family join requested", {
+			guildId,
+			familyId: family.id,
+			userId,
+		});
+		return { status: "pending", request };
+	}
+
+	public async acceptJoin(
+		guildId: SnowflakeId,
+		actorUserId: SnowflakeId,
+		targetUserId: SnowflakeId,
+	): Promise<FamilyMemberDto> {
+		const { family, membership } = await this.requireMembership(
+			guildId,
+			actorUserId,
+		);
+		this.requireRank(membership, ["OWNER", "OFFICER"], "accept members");
+
+		const request = await this.families.findJoinRequest(
+			family.id,
+			targetUserId,
+		);
+		if (!request) {
+			throw new NotFoundError("No pending request from that user", "JoinRequest");
+		}
+
+		const alreadyMember = await this.families.findMemberByUser(
+			guildId,
+			targetUserId,
+		);
+		if (alreadyMember) {
+			await this.families.deleteJoinRequest(family.id, targetUserId);
+			throw new ConflictError(
+				"That user is already in a family",
+				"TARGET_ALREADY_IN_FAMILY",
+			);
+		}
+
+		const cfg = await this.resolveSettings(guildId);
+		await this.assertHasCapacity(family.id, cfg.maxMembers);
+
+		const member = await this.families.addMember({
+			guildId,
+			familyId: family.id,
+			userId: targetUserId,
+		});
+		await this.families.deleteJoinRequestsForUser(guildId, targetUserId);
+		this.invalidateLeaderboard(guildId);
+		this.logger.info("Family join accepted", {
+			guildId,
+			familyId: family.id,
+			targetUserId,
+			actorUserId,
+		});
+		return member;
+	}
+
+	public async denyJoin(
+		guildId: SnowflakeId,
+		actorUserId: SnowflakeId,
+		targetUserId: SnowflakeId,
+	): Promise<void> {
+		const { family, membership } = await this.requireMembership(
+			guildId,
+			actorUserId,
+		);
+		this.requireRank(membership, ["OWNER", "OFFICER"], "deny members");
+
+		const request = await this.families.findJoinRequest(
+			family.id,
+			targetUserId,
+		);
+		if (!request) {
+			throw new NotFoundError("No pending request from that user", "JoinRequest");
+		}
+		await this.families.deleteJoinRequest(family.id, targetUserId);
+		this.logger.info("Family join denied", {
+			guildId,
+			familyId: family.id,
+			targetUserId,
+			actorUserId,
+		});
+	}
+
 	// ── Internals ──────────────────────────────────────────────────────────────
+
+	private async resolveSettings(
+		guildId: SnowflakeId,
+	): Promise<ResolvedFamilySettings> {
+		const s = await this.settings.findByGuild(guildId);
+		return {
+			creationEnabled: s?.familyCreationEnabled ?? true,
+			maxFamilies: s?.maxFamilies ?? null,
+			maxMembers: s?.maxFamilyMembers ?? FAMILY_MAX_MEMBERS,
+			requireApproval: s?.familyRequireApproval ?? false,
+			creationMode: s?.familyCreationMode ?? "coins",
+			creationCost: s?.familyCreationCost ?? 0n,
+			nameChangeCost: s?.familyNameChangeCost ?? 0n,
+		};
+	}
+
+	/** Coin cost is only charged when the creation mode includes coins. */
+	private coinCost(cfg: ResolvedFamilySettings, amount: bigint): bigint {
+		return cfg.creationMode === "coins" || cfg.creationMode === "both"
+			? amount
+			: 0n;
+	}
+
+	private async assertHasCapacity(
+		familyId: string,
+		maxMembers: number,
+	): Promise<void> {
+		const count = await this.families.countMembers(familyId);
+		if (count >= maxMembers) {
+			throw new ConflictError(
+				`Family is full (max ${maxMembers} members)`,
+				"FAMILY_FULL",
+			);
+		}
+	}
+
+	private async charge(
+		guildId: SnowflakeId,
+		userId: SnowflakeId,
+		amount: bigint,
+	): Promise<void> {
+		const wallet = await this.ensureWallet(guildId, userId);
+		const debited = await this.wallets.tryDebit(wallet.id, amount);
+		if (!debited) {
+			throw new ConflictError(
+				"You do not have enough coins",
+				"INSUFFICIENT_BALANCE",
+			);
+		}
+	}
+
+	private async refund(
+		guildId: SnowflakeId,
+		userId: SnowflakeId,
+		amount: bigint,
+	): Promise<void> {
+		const wallet = await this.ensureWallet(guildId, userId);
+		await this.wallets.adjustBalance(wallet.id, amount);
+	}
+
+	private async ensureWallet(guildId: SnowflakeId, userId: SnowflakeId) {
+		const existing = await this.wallets.findByGuildAndUser(guildId, userId);
+		if (existing) return existing;
+		return this.wallets.create({ guildId, userId });
+	}
+
+	private invalidateLeaderboard(guildId: SnowflakeId): void {
+		this.leaderboardCache.delete(guildId);
+	}
 
 	private validateName(name: string): string {
 		const clean = (name ?? "").trim();

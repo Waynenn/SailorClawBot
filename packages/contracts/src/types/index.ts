@@ -38,6 +38,14 @@ export interface GuildSettingsDto {
 	dailyCrimeLimit: number;
 	workDiminishingFactor: number;
 	crimeDiminishingFactor: number;
+	// Family limits
+	familyCreationEnabled: boolean;
+	maxFamilies: number | null;
+	maxFamilyMembers: number;
+	familyRequireApproval: boolean;
+	familyCreationMode: string;
+	familyCreationCost: bigint;
+	familyNameChangeCost: bigint;
 	// Tickets
 	ticketChannelId: string | null;
 	ticketCategoryId: string | null;
@@ -204,6 +212,14 @@ export interface FamilyLeaderboardEntry {
 	ownerUserId: SnowflakeId;
 	memberCount: number;
 	totalXp: number;
+}
+
+export interface FamilyJoinRequestDto {
+	id: string;
+	guildId: SnowflakeId;
+	familyId: string;
+	userId: SnowflakeId;
+	createdAt: Date;
 }
 
 export interface TicketDto {

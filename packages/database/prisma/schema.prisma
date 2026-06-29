@@ -314,17 +314,30 @@ enum FamilyRole {
 }
 
 model Family {
-  id          String         @id @default(cuid())
+  id          String              @id @default(cuid())
   guildId     String
   name        String
   ownerUserId String
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  guild       Guild          @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  guild       Guild               @relation(fields: [guildId], references: [id], onDelete: Cascade)
   members     FamilyMember[]
+  joinRequests FamilyJoinRequest[]
 
   @@unique([guildId, name])
   @@index([guildId])
+}
+
+model FamilyJoinRequest {
+  id        String   @id @default(cuid())
+  guildId   String
+  familyId  String
+  userId    String
+  createdAt DateTime @default(now())
+  family    Family   @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@unique([familyId, userId])
+  @@index([guildId, userId])
 }
 
 model FamilyMember {
