@@ -1,4 +1,4 @@
-import { DomainError } from './DomainError.js';
+import { DomainError } from "./DomainError.js";
 
 /**
  * Thrown when an action conflicts with current state
@@ -6,8 +6,8 @@ import { DomainError } from './DomainError.js';
  * `code` can be specialised (e.g. "USER_ALREADY_MUTED") while keeping the type.
  */
 export class ConflictError extends DomainError {
-  public constructor(message: string, code = 'CONFLICT') {
-    super(code, message);
-    this.name = 'ConflictError';
-  }
+	public constructor(message: string, code = "CONFLICT") {
+		super(code, message);
+		this.name = "ConflictError";
+	}
 }

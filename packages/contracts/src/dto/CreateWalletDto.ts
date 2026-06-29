@@ -1,1 +1,4 @@
-export interface CreateWalletDto { guildId:string; userId:string; }
+export interface CreateWalletDto {
+	guildId: string;
+	userId: string;
+}

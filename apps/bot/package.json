@@ -9,9 +9,10 @@
     "build": "tsc -p tsconfig.json",
     "dev": "node dist/main.js",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test"
+    "test": "node --test \"dist/**/*.test.js\""
   },
   "dependencies": {
+    "@sailorclawbot/cache": "workspace:*",
     "@sailorclawbot/contracts": "workspace:*",
     "@sailorclawbot/core": "workspace:*",
     "@sailorclawbot/database": "workspace:*",

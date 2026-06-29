@@ -1,1 +1,5 @@
-export interface CreateFamilyDto { guildId:string; ownerUserId:string; name:string; }
+export interface CreateFamilyDto {
+	guildId: string;
+	ownerUserId: string;
+	name: string;
+}

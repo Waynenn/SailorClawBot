@@ -124,8 +124,13 @@ model GuildSettings {
   starboardThreshold Int     @default(3)
 
   // Logging
-  logChannelId String?
-  logEvents    Json    @default("[]") // string[] of enabled event types
+  logChannelId        String?
+  logEvents           Json    @default("[]") // string[] of enabled event types
+  logIgnoredChannels  Json    @default("[]") // string[] of channelIds excluded from logs
+  logChannelOverrides Json    @default("{}") // { "<LogEvent>": "<channelId>" } per-event routing
+
+  // Moderation
+  muteRoleId String? // role applied for mutes > 28d (native timeout caps out); worker lifts by expiry
 
   // Embed colors (hex strings, keyed by action type)
   embedColors Json @default("{}")
@@ -284,6 +289,20 @@ model InventoryItem {
   @@index([guildId, userId])
 }
 
+model BlackjackSession {
+  id          String   @id // bj_{guildId}_{userId}
+  guildId     String
+  userId      String
+  walletId    String
+  bet         BigInt
+  playerCards Json // BlackjackCard[]
+  dealerCards Json // BlackjackCard[]
+  deck        Json // BlackjackCard[]
+  createdAt   DateTime @default(now())
+
+  @@index([guildId, userId])
+}
+
 // ============================================================================
 // FAMILY / CLAN
 // ============================================================================
@@ -411,6 +430,11 @@ model Giveaway {
   hostId       String    // userId who created giveaway
   participants Json      @default("[]") // string[] of userIds
   winners      Json      @default("[]") // string[] of winner userIds
+
+  // Entry requirements (GiveawayBot grade)
+  requiredRoleId String? // entry only with this role
+  boosterOnly    Boolean @default(false)
+  minLevel       Int? // minimum XP level to enter
 
   @@index([guildId])
   @@index([endsAt])

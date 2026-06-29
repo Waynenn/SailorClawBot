@@ -1,1 +1,3 @@
-export interface UpdateProfileDto { displayName?:string; }
+export interface UpdateProfileDto {
+	displayName?: string;
+}
