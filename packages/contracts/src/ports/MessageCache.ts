@@ -7,19 +7,19 @@
  * version from here on delete/update.
  */
 export interface CachedMessage {
-  id: string;
-  guildId: string;
-  channelId: string;
-  authorId: string;
-  authorTag: string;
-  content: string;
-  attachments: string[]; // attachment URLs
-  createdAt: string; // ISO-8601
+	id: string;
+	guildId: string;
+	channelId: string;
+	authorId: string;
+	authorTag: string;
+	content: string;
+	attachments: string[]; // attachment URLs
+	createdAt: string; // ISO-8601
 }
 
 export interface MessageCache {
-  /** Store a message. ttlSeconds defaults to the implementation's retention window. */
-  set(message: CachedMessage, ttlSeconds?: number): Promise<void>;
-  get(messageId: string): Promise<CachedMessage | null>;
-  delete(messageId: string): Promise<void>;
+	/** Store a message. ttlSeconds defaults to the implementation's retention window. */
+	set(message: CachedMessage, ttlSeconds?: number): Promise<void>;
+	get(messageId: string): Promise<CachedMessage | null>;
+	delete(messageId: string): Promise<void>;
 }

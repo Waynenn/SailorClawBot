@@ -11,6 +11,7 @@
     "prisma": "node scripts/run-prisma.mjs"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
     "@types/node": "^24.10.1",
     "prisma": "^6.19.0",
     "turbo": "^2.6.1",

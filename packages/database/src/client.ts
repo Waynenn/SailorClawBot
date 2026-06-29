@@ -1,19 +1,19 @@
 export interface PrismaClientLike {
-  $connect(): Promise<void>;
-  $disconnect(): Promise<void>;
+	$connect(): Promise<void>;
+	$disconnect(): Promise<void>;
 }
 
 type PrismaClientConstructor = new () => PrismaClientLike;
 
 interface PrismaClientModule {
-  PrismaClient: PrismaClientConstructor;
+	PrismaClient: PrismaClientConstructor;
 }
 
-const dynamicImport = new Function('specifier', 'return import(specifier)') as (
-  specifier: string
+const dynamicImport = new Function("specifier", "return import(specifier)") as (
+	specifier: string,
 ) => Promise<PrismaClientModule>;
 
 export async function createPrismaClient(): Promise<PrismaClientLike> {
-  const { PrismaClient } = await dynamicImport('@prisma/client');
-  return new PrismaClient();
+	const { PrismaClient } = await dynamicImport("@prisma/client");
+	return new PrismaClient();
 }

@@ -7,15 +7,19 @@
  * `packages/cache`; the bot depends only on this interface.
  */
 export interface RateLimitResult {
-  allowed: boolean;
-  /** Milliseconds until the next attempt is allowed (0 when allowed). */
-  retryAfterMs: number;
+	allowed: boolean;
+	/** Milliseconds until the next attempt is allowed (0 when allowed). */
+	retryAfterMs: number;
 }
 
 export interface RateLimiter {
-  /**
-   * Atomically count one hit against `key` within a fixed `windowSeconds`
-   * window of size `limit`. Returns whether the hit is allowed.
-   */
-  consume(key: string, limit: number, windowSeconds: number): Promise<RateLimitResult>;
+	/**
+	 * Atomically count one hit against `key` within a fixed `windowSeconds`
+	 * window of size `limit`. Returns whether the hit is allowed.
+	 */
+	consume(
+		key: string,
+		limit: number,
+		windowSeconds: number,
+	): Promise<RateLimitResult>;
 }

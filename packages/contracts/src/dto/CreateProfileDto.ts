@@ -1,1 +1,5 @@
-export interface CreateProfileDto { guildId:string; userId:string; displayName?:string; }
+export interface CreateProfileDto {
+	guildId: string;
+	userId: string;
+	displayName?: string;
+}

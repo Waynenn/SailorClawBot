@@ -1,1 +1,4 @@
-export interface CreateTicketDto { guildId:string; openedByUserId:string; }
+export interface CreateTicketDto {
+	guildId: string;
+	openedByUserId: string;
+}
