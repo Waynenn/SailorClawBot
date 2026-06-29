@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type {
 	FamilyDto,
+	FamilyJoinRequestDto,
 	FamilyLeaderboardEntry,
 	FamilyMemberDto,
 	FamilyRepository,
@@ -26,6 +27,13 @@ type MemberRow = {
 	role: FamilyRole;
 	joinedAt: Date;
 };
+type JoinRequestRow = {
+	id: string;
+	guildId: string;
+	familyId: string;
+	userId: string;
+	createdAt: Date;
+};
 
 function toFamilyDto(row: FamilyRow): FamilyDto {
 	return {
@@ -46,6 +54,16 @@ function toMemberDto(row: MemberRow): FamilyMemberDto {
 		userId: row.userId,
 		role: row.role,
 		joinedAt: row.joinedAt,
+	};
+}
+
+function toJoinRequestDto(row: JoinRequestRow): FamilyJoinRequestDto {
+	return {
+		id: row.id,
+		guildId: row.guildId,
+		familyId: row.familyId,
+		userId: row.userId,
+		createdAt: row.createdAt,
 	};
 }
 
@@ -288,5 +306,80 @@ export class FamilyRepositoryImpl implements FamilyRepository {
 			}))
 			.sort((a, b) => b.totalXp - a.totalXp)
 			.slice(0, limit);
+	}
+
+	public async createJoinRequest(input: {
+		guildId: SnowflakeId;
+		familyId: string;
+		userId: SnowflakeId;
+	}): Promise<FamilyJoinRequestDto> {
+		requireNonEmpty(input.guildId, "guildId");
+		requireNonEmpty(input.familyId, "familyId");
+		requireNonEmpty(input.userId, "userId");
+		try {
+			const row = await this.db.familyJoinRequest.create({
+				data: {
+					guildId: input.guildId,
+					familyId: input.familyId,
+					userId: input.userId,
+				},
+			});
+			return toJoinRequestDto(row);
+		} catch (error) {
+			translatePrismaError(error, "create family join request");
+		}
+	}
+
+	public async findJoinRequest(
+		familyId: string,
+		userId: SnowflakeId,
+	): Promise<FamilyJoinRequestDto | null> {
+		requireNonEmpty(familyId, "familyId");
+		requireNonEmpty(userId, "userId");
+		const row = await this.db.familyJoinRequest.findUnique({
+			where: { familyId_userId: { familyId, userId } },
+		});
+		return row ? toJoinRequestDto(row) : null;
+	}
+
+	public async listJoinRequests(
+		familyId: string,
+	): Promise<FamilyJoinRequestDto[]> {
+		requireNonEmpty(familyId, "familyId");
+		const rows = await this.db.familyJoinRequest.findMany({
+			where: { familyId },
+			orderBy: { createdAt: "asc" },
+		});
+		return rows.map(toJoinRequestDto);
+	}
+
+	public async deleteJoinRequest(
+		familyId: string,
+		userId: SnowflakeId,
+	): Promise<void> {
+		requireNonEmpty(familyId, "familyId");
+		requireNonEmpty(userId, "userId");
+		try {
+			await this.db.familyJoinRequest.deleteMany({
+				where: { familyId, userId },
+			});
+		} catch (error) {
+			translatePrismaError(error, "delete family join request");
+		}
+	}
+
+	public async deleteJoinRequestsForUser(
+		guildId: SnowflakeId,
+		userId: SnowflakeId,
+	): Promise<void> {
+		requireNonEmpty(guildId, "guildId");
+		requireNonEmpty(userId, "userId");
+		try {
+			await this.db.familyJoinRequest.deleteMany({
+				where: { guildId, userId },
+			});
+		} catch (error) {
+			translatePrismaError(error, "delete family join requests for user");
+		}
 	}
 }

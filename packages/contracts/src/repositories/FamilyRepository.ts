@@ -1,5 +1,6 @@
 import type {
 	FamilyDto,
+	FamilyJoinRequestDto,
 	FamilyLeaderboardEntry,
 	FamilyMemberDto,
 	FamilyRole,
@@ -46,4 +47,22 @@ export interface FamilyRepository {
 		guildId: SnowflakeId,
 		limit: number,
 	): Promise<FamilyLeaderboardEntry[]>;
+
+	// ── Join requests (approval flow) ───────────────────────────────────────────
+	createJoinRequest(input: {
+		guildId: SnowflakeId;
+		familyId: string;
+		userId: SnowflakeId;
+	}): Promise<FamilyJoinRequestDto>;
+	findJoinRequest(
+		familyId: string,
+		userId: SnowflakeId,
+	): Promise<FamilyJoinRequestDto | null>;
+	listJoinRequests(familyId: string): Promise<FamilyJoinRequestDto[]>;
+	deleteJoinRequest(familyId: string, userId: SnowflakeId): Promise<void>;
+	/** Remove every pending request a user has across the guild (e.g. after they join one). */
+	deleteJoinRequestsForUser(
+		guildId: SnowflakeId,
+		userId: SnowflakeId,
+	): Promise<void>;
 }
